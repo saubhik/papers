@@ -77,37 +77,45 @@ Instead, RDDs log coarse-grained transformations like map, filter, join
 to provide fault tolerance rather than actual data.</li>
 </ul>
 <h4 id="definitions">Definitions</h4>
-<p>RDDs are read-only, in-memory, parallel, partitioned data structures
-that can only be created through deterministic transformations on data
-in stable storage or other RDDs. RDD stores metadata about its lineage
-to be able to compute its partitions from data in stable storage. A
-transformation is a lazy operation that defines a new RDD. Actions are
-operations that return a value to the application or materialize data to
-stable storage, e.g.&#xA0;count, collect, save. RDDs are computed lazily only
-when used in an action. Spark provides language-integrated API where
-each RDD is an object, and transformations are object methods.</p>
+<p><em>RDDs</em> are read-only, in-memory, parallel, partitioned data
+structures that can only be created through deterministic
+transformations on data in stable storage or other RDDs. RDD stores
+metadata about its lineage to be able to compute its partitions from
+data in stable storage. A <em>transformation</em> is a lazy operation
+that defines a new RDD. <em>Actions</em> are operations that return a
+value to the application or materialize data to stable storage,
+e.g.&#xA0;count, collect, save. RDDs are computed lazily only when used in an
+action. Spark provides language-integrated API where each RDD is an
+object, and transformations are object methods.</p>
 <h4 id="why-not-use-a-dsm-distributed-shared-memory-system-instead">Why
 not use a DSM (Distributed Shared Memory) system instead?</h4>
-<p>RDDs provide advantages compared with DSM: - Applications in DSM
-systems read &amp; write to arbitrary locations in the global address
-space. RDDs allow only bulk writes, and hence suited for batch
-analytics. This makes fault tolerance efficient by not having to
-checkpoint &amp; rollback the entire application in-memory state, and
-instead recover by recomputing the lost partition of the RDD using the
-lineage metadata. - Can run backup tasks as RDDs are immutable. Backup
-tasks are hard to implement in DSMs as updates to the same memory
-location by different copies could lead to incorrect state. - Spark
-runtime can schedule tasks based on data locality in RDDs for
-performance, not possible in DSM. - Graceful Degradation: When out of
-memory, RDDs can be stored on disk &amp; provide similar performance as
-data-parallel systems.</p>
+<p>RDDs provide advantages compared with DSM.</p>
+<ul>
+<li>Applications in DSM systems read &amp; write to arbitrary locations
+in the global address space. RDDs allow only bulk writes, and hence
+suited for batch analytics. This makes fault tolerance efficient by not
+having to checkpoint &amp; rollback the entire application in-memory
+state, and instead recover by recomputing the lost partition of the RDD
+using the lineage metadata.</li>
+<li>Can run backup tasks as RDDs are immutable. Backup tasks are hard to
+implement in DSMs as updates to the same memory location by different
+copies could lead to incorrect state.</li>
+<li>Spark runtime can schedule tasks based on data locality in RDDs for
+performance, not possible in DSM.</li>
+<li>Graceful Degradation: When out of memory, RDDs can be stored on disk
+&amp; provide similar performance as data-parallel systems.</li>
+</ul>
 <h4 id="representing-rdds">Representing RDDs</h4>
 <p>RDDs are represented in a graph-based manner to support a rich set of
-transformations. RDDs expose five pieces of information: - set of
-partitions - set of dependencies on parent RDDs - function for computing
-the dataset based on its parents - metadata about its partitioning
-scheme (hash/range partitioned) - metadata about data placement (fast
-access due to data locality)</p>
+transformations. RDDs expose five pieces of information.</p>
+<ul>
+<li>set of partitions</li>
+<li>set of dependencies on parent RDDs</li>
+<li>function for computing the dataset based on its parents</li>
+<li>metadata about its partitioning scheme (hash/range partitioned)</li>
+<li>metadata about data placement (fast access due to data
+locality)</li>
+</ul>
 <p>In a job with many iterations, it may be necessary to reliably
 replicate some of the versions of the RDDs to reduce fault recovery
 times. RDDs allow users to control the persistence and the partitioning
@@ -118,22 +126,30 @@ data, and on-disk storage. Specifying consistent partitioning across
 iterations can optimize the communication across nodes, and improve
 run-time.</p>
 <p><em>Challenge:</em> How to represent dependencies between RDDs in
-this graph-based interface? Classify dependencies into two types: -
-narrow dependencies: each partition of parent RDD used by at most one
-partition of child RDD - wide dependencies: each partition of parent RDD
-used by multiple partitions of child RDD</p>
-<p>Two reasons for this classification: - narrow dependencies allow for
-pipelined execution on one node which can compute all parent partitions,
-but wide dependencies require data from all parent partitions to be
-available &amp; communicated across nodes in a MapReduce fashion. -
-fault recovery is faster with a narrow dependency because only the lost
-parent partitions need to be recomputed, whereas for wide dependencies,
-a single failed node might cause loss of some partition from all
-ancestors of an RDD, requiring a complete re-execution. Checkpointing to
-stable storage is useful for fault recovery of RDDs with long lineage
-chains and wide dependencies. This can avoid full recomputations. For
-RDDs with short lineage chains, checkpointing may not be worthwhile. The
-decision of checkpointing is left to the user.</p>
+this graph-based interface? We can classify dependencies into two
+types.</p>
+<ul>
+<li>narrow dependencies: each partition of parent RDD used by at most
+one partition of child RDD</li>
+<li>wide dependencies: each partition of parent RDD used by multiple
+partitions of child RDD</li>
+</ul>
+<p>Two reasons for this classification.</p>
+<ul>
+<li>narrow dependencies allow for pipelined execution on one node which
+can compute all parent partitions, but wide dependencies require data
+from all parent partitions to be available &amp; communicated across
+nodes in a MapReduce fashion.</li>
+<li>fault recovery is faster with a narrow dependency because only the
+lost parent partitions need to be recomputed, whereas for wide
+dependencies, a single failed node might cause loss of some partition
+from all ancestors of an RDD, requiring a complete re-execution.
+Checkpointing to stable storage is useful for fault recovery of RDDs
+with long lineage chains and wide dependencies. This can avoid full
+recomputations. For RDDs with short lineage chains, checkpointing may
+not be worthwhile. The decision of checkpointing is left to the
+user.</li>
+</ul>
 <p>This graph-based interface makes it easy to implement new
 transformations without interfering with the scheduler. Spark is
 implemented in about 14,000 lines of Scala, and runs over the Mesos
