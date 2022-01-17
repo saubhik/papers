@@ -15,13 +15,14 @@
 id="resilient-distributed-datasets-a-fault-tolerant-abstraction-for-in-memory-cluster-computing">Resilient
 Distributed Datasets: A Fault-Tolerant Abstraction for In-Memory Cluster
 Computing</h1>
-<p><em>Paper:</em> Matei Zaharia, Mosharaf Chowdhury, Tathagata Das,
-Ankur Dave, Justin Ma, Murphy McCauley, Michael J. Franklin, Scott
-Shenker, and Ion Stoica. 2012. Resilient distributed datasets: a
-fault-tolerant abstraction for in-memory cluster computing. In
-Proceedings of the 9th USENIX conference on Networked Systems Design and
-Implementation (NSDI&#x2019;12). USENIX Association, USA, 2.</p>
-<p>Paper summary by Saubhik Mukherjee.</p>
+<p><em>Paper:</em> <a
+href="https://dl.acm.org/doi/10.5555/2228298.2228301">Matei Zaharia,
+Mosharaf Chowdhury, Tathagata Das, Ankur Dave, Justin Ma, Murphy
+McCauley, Michael J. Franklin, Scott Shenker, and Ion Stoica. 2012.
+Resilient distributed datasets: a fault-tolerant abstraction for
+in-memory cluster computing. In Proceedings of the 9th USENIX conference
+on Networked Systems Design and Implementation (NSDI&#x2019;12). USENIX
+Association, USA, 2.</a></p>
 <!---
 Contents:
 - [x] Introduction
@@ -189,7 +190,7 @@ using a 54 GB Wikipedia dump &amp; achieved 7.4x speedup over Hadoop on
 30 nodes.</li>
 </ul>
 <h2 id="strengths-weaknesses">Strengths &amp; Weaknesses</h2>
-<p><strong>Strengths:</strong> 1. The paper provides a useful data
+<p><strong>Strengths:</strong> - The paper provides a useful data
 sharing abstraction through RDDs that wasn&#x2019;t provided by cluster
 computing frameworks at the time. This enables more broader classes of
 applications such as iterative machine learning algorithms and
@@ -198,18 +199,18 @@ abstractions for accessing computational resources in a cluster, but not
 distributed memory. For reusing data between computations, these
 frameworks relied on writing to external stable storage incurring
 overheads due to replication, disk I/O and serialization costs. Making
-RDDs immutable, they solve the consistency issue by design. 2. The Spark
+RDDs immutable, they solve the consistency issue by design. - The Spark
 system allows a general-purpose programming language, Scala, to be used
 at interactive speeds for in-memory data mining on clusters. Indeed, the
 authors let users run Spark interactively from the interpreter to query
-big datasets. 3. A key advantage of RDDs is efficient fault recovery
+big datasets. - A key advantage of RDDs is efficient fault recovery
 mechanisms by avoiding checkpointing of entire in-memory state in
 contrast Distributed Shared Memory (DSM) systems. Users can specify the
 persistence of RDDs, and only the lineage graphs for the RDDs is logged,
 which are many order of magnitude smaller than entire application state.
 Another advantage is leveraging data locality to send computations to
-the nodes with the data. 4. The transformations and actions supported
-are rich enough to express a wide range of batch analytics applications,
+the nodes with the data. - The transformations and actions supported are
+rich enough to express a wide range of batch analytics applications,
 even though it might seem counter-intuitive as only coarse-grained
 transformations are supported on RDDs. This required recognizing the
 common computations employed in batch analytics applications and
@@ -217,12 +218,12 @@ abstracting them out to support them on RDDs. This expressivity of the
 RDD abstraction is a big part of the reason of Spark&#x2019;s popularity.
 Indeed, they show in the paper that RDDs can easily express a wide range
 of parallel applications in a few lines of code.</p>
-<p><strong>Weaknesses:</strong> 1. Spark is best suited for batch
+<p><strong>Weaknesses:</strong> - Spark is best suited for batch
 analytics, but not for asynchronous application requiring fine-grained
 modifications to distributed state. For example, storage system for a
 web application or an incremental web crawler. These applications
 require systems with traditional update logging and data checkpointing
-mechanisms, e.g.&#xA0;databases, RAMCloud, Percolator, Piccolo. 2. Spark
+mechanisms, e.g.&#xA0;databases, RAMCloud, Percolator, Piccolo. - Spark
 relies on the user for specifying the persistence and optimize data
 placement. This makes it less accessible to a broader audience. Indeed,
 the authors mention that they are investigating automatic checkpointing
@@ -232,7 +233,7 @@ should be able to select an optimal set of RDDs to checkpoint to
 minimize system recovery time. Leveraging data locality can also be done
 by the scheduler by scheduling tasks on the right nodes.</p>
 <h2 id="follow-up">Follow-Up</h2>
-<ol type="1">
+<ul>
 <li>Some immediate follow-up ideas to extend Spark would be:
 <ul>
 <li>tolerating scheduler failures by replicating the RDD lineage
@@ -251,11 +252,12 @@ more general Distributed Shared Memory (DSM) systems by allowing
 read/write to each memory location instead of allowing just bulk writes.
 But this could mean employing more expensive fault tolerant mechanisms,
 but there could be applications which could make the tradeoff
-worthwhile. This brings the advantages of using RDDs (stragger
+worthwhile. This brings the advantages of using RDDs (straggler
 mitigation through backup tasks, work placement leveraging data
 locality, and graceful degradation when out of memory) to DSM
 systems.</li>
-</ol>
+</ul>
+<hr />
   </div>
 
   <script type="text/javascript" src="../js/mathjax_config.js"></script>
