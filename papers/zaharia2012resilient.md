@@ -87,13 +87,13 @@ This graph-based interface makes it easy to implement new transformations withou
 - They also compared the performance of Spark with Hadoop for PageRank using a 54 GB Wikipedia dump & achieved 7.4x speedup over Hadoop on 30 nodes.
 
 ## Strengths & Weaknesses
-**Strengths:**
+#### Strengths
 - The paper provides a useful data sharing abstraction through RDDs that wasn't provided by cluster computing frameworks at the time. This enables more broader classes of applications such as iterative machine learning algorithms and interactive data mining. Frameworks such as MapReduce provided abstractions for accessing computational resources in a cluster, but not distributed memory. For reusing data between computations, these frameworks relied on writing to external stable storage incurring overheads due to replication, disk I/O and serialization costs. Making RDDs immutable, they solve the consistency issue by design.
 - The Spark system allows a general-purpose programming language, Scala, to be used at interactive speeds for in-memory data mining on clusters. Indeed, the authors let users run Spark interactively from the interpreter to query big datasets.
 - A key advantage of RDDs is efficient fault recovery mechanisms by avoiding checkpointing of entire in-memory state in contrast Distributed Shared Memory (DSM) systems. Users can specify the persistence of RDDs, and only the lineage graphs for the RDDs is logged, which are many order of magnitude smaller than entire application state. Another advantage is leveraging data locality to send computations to the nodes with the data.
 - The transformations and actions supported are rich enough to express a wide range of batch analytics applications, even though it might seem counter-intuitive as only coarse-grained transformations are supported on RDDs. This required recognizing the common computations employed in batch analytics applications and abstracting them out to support them on RDDs. This expressivity of the RDD abstraction is a big part of the reason of Spark's popularity. Indeed, they show in the paper that RDDs can easily express a wide range of parallel applications in a few lines of code.
 
-**Weaknesses:**
+#### Weaknesses
 - Spark is best suited for batch analytics, but not for asynchronous application requiring fine-grained modifications to distributed state. For example, storage system for a web application or an incremental web crawler. These applications require systems with traditional update logging and data checkpointing mechanisms, e.g. databases, RAMCloud, Percolator, Piccolo.
 - Spark relies on the user for specifying the persistence and optimize data placement. This makes it less accessible to a broader audience. Indeed, the authors mention that they are investigating automatic checkpointing mechanisms. This is because the Spark scheduler knows best the size of each dataset as well as the computation time of the dataset, and so it should be able to select an optimal set of RDDs to checkpoint to minimize system recovery time. Leveraging data locality can also be done by the scheduler by scheduling tasks on the right nodes.
 

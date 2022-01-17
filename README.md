@@ -3,7 +3,7 @@ This repository is a compendium of notes on papers I've read.
 
 ## Getting Started
 If you want to read the paper summaries, simply go
-[here](https://mwhittaker.github.io/papers). If you want to add a paper
+[here](https://saubhik.github.io/papers). If you want to add a paper
 summary, or clone this repo and create summaries of your own, here's how
 everything works.
 
