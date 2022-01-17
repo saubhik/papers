@@ -1,4 +1,4 @@
-# [Papers](https://mwhittaker.github.io/papers)
+# Papers
 This repository is a compendium of notes on papers I've read.
 
 ## Getting Started
