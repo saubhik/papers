@@ -50,14 +50,14 @@ Problems:
 
 - low hardware efficiency. Note that backward passes are expensive than forward passes. The numbers in the boxes show the ID of the input that's flowing through the system at that time point. At most 1 worker is active at any point in time.
 
-![Timeline with MP](images/narayanan2019pipedream/model-parallelism.png){width=30%}
+![Timeline with MP](images/narayanan2019pipedream/model-parallelism.png){width=40%}
 
 ### Pipeline Parallelism
 
 This is a combination of data parallelism and model parallelism with pipelining.
 Multiple inputs are injected in the pipeline at any point in time. This ensures that in steady state, none of the workers are idle. The total amount of time in steady state far exceeds the total amount of time spent in the startup state. This is 5.3x faster compared to data parallelism without sacrificing the final accuracy of the model.
 
-![Timeline with PP](images/narayanan2019pipedream/pipeline-parallelism.png){width=30%}
+![Timeline with PP](images/narayanan2019pipedream/pipeline-parallelism.png){width=40%}
 
 Even though pipelining is a common optimization used in systems such as in CPU processors, pipelining in DNN training has some challenges:
 
@@ -83,7 +83,7 @@ Merely splitting operators over the workers doesn't always give us a good pipeli
 
 Stage Replication helps load balance computation & reduce communication between workers.
 
-![PipeDream Config](images/narayanan2019pipedream/pipedream-config.png){width=30%}
+![PipeDream Config](images/narayanan2019pipedream/pipedream-config.png){width=40%}
 
 PipeDream partitions operators among different workers and also decides on the appropriate replication factor. This is done using a profiler and an optimizer. The optimizer is able to generalize among many different axes: hardware topologies, model structures, memory capacities of workers. The paper describes the algorithm.
 
