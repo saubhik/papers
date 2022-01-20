@@ -13,6 +13,6 @@ pdfs/%.pdf: papers/%.md
 	pandoc \
 		--variable geometry:margin=0.5in \
 		--variable urlcolor:blue \
-		--from markdown-tex_math_dollars-raw_tex \
+		--mathjax \
 		--to pdf \
 		--ascii $< >> $@
