@@ -93,7 +93,7 @@ is active at any point in time.</li>
 </ul>
 <figure>
 <img src="../images/narayanan2019pipedream/model-parallelism.png"
-style="width:40.0%" alt="Timeline with MP" />
+style="width:50.0%" alt="Timeline with MP" />
 <figcaption aria-hidden="true">Timeline with MP</figcaption>
 </figure>
 <h3 id="pipeline-parallelism">Pipeline Parallelism</h3>
@@ -105,7 +105,7 @@ time spent in the startup state. This is 5.3x faster compared to data
 parallelism without sacrificing the final accuracy of the model.</p>
 <figure>
 <img src="../images/narayanan2019pipedream/pipeline-parallelism.png"
-style="width:40.0%" alt="Timeline with PP" />
+style="width:50.0%" alt="Timeline with PP" />
 <figcaption aria-hidden="true">Timeline with PP</figcaption>
 </figure>
 <p>Even though pipelining is a common optimization used in systems such
@@ -152,7 +152,7 @@ activations &amp; gradients.</li>
 communication between workers.</p>
 <figure>
 <img src="../images/narayanan2019pipedream/pipedream-config.png"
-style="width:40.0%" alt="PipeDream Config" />
+style="width:50.0%" alt="PipeDream Config" />
 <figcaption aria-hidden="true">PipeDream Config</figcaption>
 </figure>
 <p>PipeDream partitions operators among different workers and also
