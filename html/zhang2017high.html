@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Papers</title>
+  <link href='../css/style.css' rel='stylesheet'>
+  <meta name=viewport content="width=device-width, initial-scale=1">
+</head>
+
+<body>
+  <div id=header>
+    <a href="../">Papers</a>
+  </div>
+  <div id="container">
+<h1
+id="high-resolution-measurement-of-data-center-microbursts">High-Resolution
+Measurement of Data Center Microbursts</h1>
+<p>Paper: <a href="https://dl.acm.org/doi/10.1145/3131365.3131375">Qiao
+Zhang, Vincent Liu, Hongyi Zeng, and Arvind Krishnamurthy. 2017.
+High-resolution measurement of data center microbursts. In Proceedings
+of the 2017 Internet Measurement Conference (IMC &#x2019;17). Association for
+Computing Machinery, New York, NY, USA, 78&#x2013;85.
+DOI:https://doi.org/10.1145/3131365.3131375</a></p>
+<p>This study explores fine-grained behavior of a large production data
+center using extremely high-resolution measurements (10-100
+microseconds) of rack-level traffic.</p>
+<p>Earlier work on data center traffic are either on the scale of
+minutes or are heavily sampled. The two approaches taken in earlier
+works are:</p>
+<ul>
+<li>Packet sampling (e.g.&#xA0;Facebook samples every 1 in 30,000)</li>
+<li>Coarse-grained counters (e.g.&#xA0;SNMP collection in minute-scale)</li>
+</ul>
+<p>Coarse-grained measurements can inform us of long-term network
+behavior and communication patterns, but fail to provide insight into
+many important behaviors such as congestion. This study developed a
+custom high-resolution counter collection framework on top of the data
+center&#x2019;s in-house switch platform, and then analyzes various counters
+(including packet counters and buffer utilization statistics) from
+Top-of-Rack (ToR) switches in multiple clusters running multiple
+applications.</p>
+<h3 id="high-resolution-counter-collection">High-resolution counter
+collection</h3>
+<p>Modern switches include relatively powerful general-purpose
+multi-core CPUs in addition to their switching ASICs. The ASICs are
+responsible for packet processing, and need to maintain many counters.
+The CPUs handle control plane logic. The CPU can poll the switch&#x2019;s local
+counters at extremely low latency, and batch the samples before sending
+them to a distributed collector service that is fine-grained and
+scalable.</p>
+<p>The study focusses on 3 sets of counters. For each, they manually
+determine the minimum sampling interval possible while maintaining ~1%
+sampling loss.</p>
+<ul>
+<li>Byte count: Measures the cumulative number of bytes sent/received
+per switch port, to calculate the throughput. Sampling interval: 25
+microseconds.</li>
+<li>Packet size: Histogram of the packet sizes sent/received at each
+switch port. The ASIC bins packets into several buckets. Sampling
+interval: 25 microseconds.</li>
+<li>Peak buffer utilization: Take the peak utilization since the last
+measurement, and reset the counter after reading. Sampling interval: 50
+microseconds.</li>
+</ul>
+<h3 id="data-set">Data set</h3>
+<p>Machines are organized into racks and connected to a ToR switch via
+10 Gbps Ethernet links. Each ToR is connected to an aggregation layer of
+&#x201C;fabric&#x201D; switches via 40 or 100 Gbps links. The &#x201C;fabric&#x201D; switches are
+connected to a &#x201C;spine&#x201D; switches. This study focusses on the ToR
+switches.</p>
+<p>Each server machine have a single role (application):</p>
+<ul>
+<li>Web: Receive web requests and assemble a dynamic web page using data
+from many remote sources.</li>
+<li>Cache: Serve as an in-memory cache of data used by the web servers.
+Some are leaders handling cache coherency, and some are followers,
+serving read requests.</li>
+<li>Hadoop: For offline analysis and data mining.</li>
+</ul>
+<p>An entire rack is dedicated to each of these roles. Measuring at a
+ToR level, the results can isolate behavior of different classes of
+applications.</p>
+<h3 id="port-level-behavior">Port-level behavior</h3>
+<p>They studied the fine-grained behavior of individual ports. A
+switch&#x2019;s egress link is hot if, for the measurement period, its
+utilization exceeds 50%. An unbroken sequence of hot samples indicates a
+burst. They choose to define a burst by throughput rather than the
+buffer utilization as buffers are often shared and dynamically carved,
+making pure byte counts a more deterministic measure of burstiness.</p>
+<p>Findings:</p>
+<ul>
+<li><em>High utilization is short lived.</em> The 90th percentile burst
+duration is &lt; 200 microseconds. Congestion events observed by less
+granular measurements are likely collection of smaller microbursts.</li>
+<li><em>Bursts are correlated.</em> The high-utilization intervals tend
+to be correlated.</li>
+<li><em>Fine-grained measurements are needed to capture bursty behavior
+accurately.</em> The 25 microsecond measurement granularity is itself
+too coarse as over 60% of Web and Cache bursts terminated within that
+period.</li>
+<li><em>Inter-burst periods have a much longer tail than burst
+durations.</em> Most interburst periods are small, particularly for
+Cache and Web racks where 40% of inter-burst periods last less than 100
+microseconds, but when idle periods are persistent, the inter-burst
+periods last for 100s of milliseconds.</li>
+<li><em>Bursty periods tend to include more large packets than
+non-bursty periods.</em> Hadoop sees mostly full-MTU packets. The
+material packet-level difference between packets inside and outside
+bursts suggests that bursts at the ToR layer are often a result of
+application-behavior changes, rather than random collisions.</li>
+<li><em>Different applications have different utilization patterns, but
+all are extremely long tailed.</em> This suggests that when bursts
+occur, they are generally intense.</li>
+</ul>
+<h3 id="cross-port-behavior">Cross-port behavior</h3>
+<p>They studied the synchronized behavior of switch ports. Each switch&#x2019;s
+port can be split into 2 classes: uplinks and downlinks. The uplinks
+connect the rack to the rest of the data center, and modulo network
+failures, they are symmetric in both capacity and reliability. Downlinks
+connect to individual servers, which all serve similar role.</p>
+<p>ToR switches use Equal-Cost MultiPath (ECMP) to spread load over each
+of their 4 uplinks. ECMP configurations introduce at least 2 sources of
+potential imbalance in order to avoid TCP reordering:</p>
+<ul>
+<li>ECMP operates on the level of flows, rather than packets</li>
+<li>ECMP uses consistent hashing, which cannot guarantee optimal
+balance</li>
+</ul>
+<p>Findings:</p>
+<ul>
+<li><em>Uplinks are unbalanced at small timescales.</em> The
+instantaneous efficacy of load balancing impact drop- and
+latency-sensitive protocols like RDMA and TIMELY. The imbalance (Mean
+Absolute Deviation, MAD, of the four uplink utilizations) is large (p50
+over 25%) at small timescales (40 microseconds). This indicates
+flow-level load balancing can be inefficient in the short term.</li>
+<li><em>The interconnect does not add significant variance.</em> The
+ingress and egress traffic for the ToR switch exhibits a similar pattern
+(MAD of egress vs ingress traffic).</li>
+<li><em>Downlink utilization balance depends on application.</em> Web
+servers run stateless services that are entirely driven by user
+requests, so correlation is zero (balanced). Subsets of the Cache
+servers show very strong correlation with one another (imbalanced). This
+is because their requests are initiated in groups from web servers, and
+hence those subsets are involved in the same scatter-gather
+requests.</li>
+<li><em>Direction of bursts depends on application.</em> For Web and
+Hadoop racks, hot downlinks are more frequent due to high fan-in where
+many servers send to a single destination. Cache servers have more
+frequent hot uplinks than downlinks because of two properties: (1) they
+exhibit simple response-to-request communication pattern, and (2) cache
+responses are much larger than the requests.</li>
+<li><em>Peak buffer occupancy depends on application.</em> Hadoop puts
+significantly more stress on ToR buffers than either Web or Cache racks,
+and buffer occupancy scales with the number of hot ports. Buffer
+occupancy levels off for high numbers of hot ports.</li>
+</ul>
+<h2 id="strengths-weaknesses">Strengths &amp; Weaknesses</h2>
+<h3 id="strengths">Strengths</h3>
+<ul>
+<li>This study has implications for network measurement, design and
+evaluation of new network protocols and architectures. As network
+bandwidth continues to rise in data centers, the timescale of network
+events will decrease accordingly. It is essential to understand
+high-resolution behavior of these networks. At these small timescales,
+traffic is extremely bursty, load is unbalanced, and different
+applications have different behavior.</li>
+<li>The study required non-trivial engineering work to implement a
+low-latency sampling framework built on top of an in-house switch
+platform. It required manually determining the sampling intervals with
+minimal sampling loss. Along with the engineering, the study also
+rigorously establishes correlation between consecutive bursts using the
+likelihood ratio test, and theoretically rejects the hypothesis that
+burst arrivals are Poisson.</li>
+</ul>
+<h3 id="weaknesses">Weaknesses</h3>
+<ul>
+<li>The paper presents the numbers and findings for fine-grained
+port-level &amp; synchronized network traffic behavior extensively, but
+does not put much effort in providing reasoning for the findings
+extensively. The results presented in the paper gives insight into the
+degree of the problem in practice, but does not attempt to solve any of
+the issues presented.</li>
+<li>No comparisons with long-term traffic behavior were made. It would
+have been more interesting to see the comparison with similar studies
+made with coarse-grained measurements, on the same deployment.</li>
+</ul>
+<h2 id="implications-follow-on">Implications &amp; Follow-On</h2>
+<p>Avenues for possible future work:</p>
+<ul>
+<li><em>load balancing.</em> Load balancing on microflows rather than
+5-tuples - splitting a flow as soon as the inter-packet gap is long
+enough to guarantee no reordering. This is viable as inter-burst periods
+typically exceed end-to-end latencies. However, faster networks may
+decrease this gap.</li>
+<li><em>congestion control.</em> Traditional CC algorithms either react
+to packet drops, RTT variation, or ECN as congestion signal. All of
+these signals require at least RTT/2 to arrive at sender, and protocol
+might take multiple RTTs to adapt. But large number of microbursts are
+shorter than single RTT. Buffering is viable to handle momentary
+congestion but lower-latency congestion signals may be required.</li>
+<li><em>pacing.</em> TCP pacing was one of the original mechanisms that
+prevented bursty traffic, but has been rendered ineffective through new
+features like segmentation offload, interrupt coalescing. Recent pacing
+proposals may be worth considering either at the hardware or software
+level.</li>
+</ul>
+<p>Other follow-on ideas:</p>
+<ul>
+<li>Domain knowledge suggests than application-level demand and traffic
+patterns are a significant contributor to bursts. But to study this as a
+cause of burstiness would require correlating and synchronizing switch
+and end hosts measurements at a microsecond level.</li>
+<li>The study focusses on ToR switches, and leaves the study of other
+network tiers (&#x201C;fabric&#x201D; and &#x201C;spine&#x201D; switches) to future work. It would
+be interesting to see the network traffic behavior at these
+aggregate-level switches.</li>
+</ul>
+<hr />
+  </div>
+
+  <script type="text/javascript" src="../js/mathjax_config.js"></script>
+	<script>
+		(function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+		(i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+		m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+		})(window,document,'script','https://www.google-analytics.com/analytics.js','ga');
+
+		ga('create', 'UA-90310997-2', 'auto');
+		ga('send', 'pageview');
+	</script>
+</body>
+</html>
