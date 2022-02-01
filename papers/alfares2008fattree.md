@@ -194,3 +194,7 @@ The 12 racks can be placed around pod switch rack in two dimensions to reduce ca
 - Investigate the performance with fault tolerance mechanisms like Bidirectional Forwarding Detection (BFD) active in a real data-center deployment. The achievable bisection bandwidth would correspond to more realistic values.
 
 ---
+
+<script type="text/javascript" async
+  src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-MML-AM_CHTML">
+</script>
