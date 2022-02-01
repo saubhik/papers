@@ -52,9 +52,9 @@ ECMP performs static load splitting among flows. This suffers from:
 
 #### Cost
 
-- The switching h/w to interconnect 20,000 hosts with full bandwidth (1:1) among all hosts costs \$37,000,000 (2008). A Fat-tree built from only 48-port GigE switches would support 27,648 hosts at 1:1 oversubscription for \$8,640,000 (2008).
+- The switching h/w to interconnect 20,000 hosts with full bandwidth (1:1) among all hosts costs USD 37,000,000 (2008). A Fat-tree built from only 48-port GigE switches would support 27,648 hosts at 1:1 oversubscription for USD 8,640,000 (2008).
 - There is no requirement of higher speed uplinks in the fat-tree topology.
-- It is technically infeasible to build a 27,648-node cluster with 10 GigE switches without fat-tree architecture, even though it would cost over \$690,000,000 (2008).
+- It is technically infeasible to build a 27,648-node cluster with 10 GigE switches without fat-tree architecture, even though it would cost over USD 690,000,000 (2008).
 
 #### Clos Networks/Fat-Trees
 
@@ -119,7 +119,7 @@ A flow is a sequence of packets with the same entries for a subset of fields of 
 Pod switches performs flow classification:
 
 - Recognize subsequent packets of same flow and forward them on the same outgoing port. This avoids packet reordering.
-- Periodically reassign a minimal number of flow output ports to minimize disparity between aggreate flow capacity of different ports. This ensures fair distribution on flow on upward-pointing ports in the face of dynamically changing flow sizes.
+- Periodically reassign a minimal number of flow output ports to minimize disparity between aggregate flow capacity of different ports. This ensures fair distribution on flow on upward-pointing ports in the face of dynamically changing flow sizes.
 
 #### Flow Scheduling
 
@@ -184,7 +184,7 @@ The 12 racks can be placed around pod switch rack in two dimensions to reduce ca
 ### Weaknesses
 
 - Flow scheduling is impractical in real-world deployments. The use of a centralized scheduler with knowledge of all active flows and the status of all links is infeasible for large arbitrary networks. The regularity of the fat-tree topology can simplify the search for disjoint, uncontended paths but this study is not undertaken. Flow scheduling as they do it is infeasible.
-- They attempt to solve the cabling problem with clever packaging. But they make some good number of assumptions: each host takes up 1RU, individual racks accomodating 48 machines, and packing 48 switches in a single rack. This puts constraint on the data center operator to trade away some other placement requirements to accomodate the fat-tree interconnect requirements.
+- They attempt to solve the cabling problem with clever packaging. But they make some good number of assumptions: each host takes up 1RU, individual racks accommodating 48 machines, and packing 48 switches in a single rack. This puts constraint on the data center operator to trade away some other placement requirements to accommodate the fat-tree interconnect requirements.
 - The experiments in power and heat issues are not made in real deployments of the design. It would be interesting to see if the real world deployments conform with their findings. There might be other practical overheads associated with using a large number of commodity switches.
 
 ## Follow-on
