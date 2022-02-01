@@ -1,0 +1,428 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Papers</title>
+  <link href='../css/style.css' rel='stylesheet'>
+  <meta name=viewport content="width=device-width, initial-scale=1">
+</head>
+
+<body>
+  <div id=header>
+    <a href="../">Papers</a>
+  </div>
+  <div id="container">
+<h1 id="a-scalable-commodity-data-center-network-architecture">A
+Scalable, Commodity Data Center Network Architecture</h1>
+<p>Paper: <a
+href="https://dl.acm.org/doi/10.1145/1402946.1402967">Mohammad Al-Fares,
+Alexander Loukissas, and Amin Vahdat. 2008. A scalable, commodity data
+center network architecture. SIGCOMM Comput. Commun. Rev.&#xA0;38, 4 (October
+2008), 63&#x2013;74. DOI:https://doi.org/10.1145/1402946.1402967</a></p>
+<p>In 2008, data center networks consisted of a tree of routers and
+switches with progressively more specialized and higher-end IP
+switches/routers up in the hierarchy, but this resulted in topologies
+which supported only 50% of the aggregate bandwidth available at the
+edge of the network, while still incurring tremendous cost.</p>
+<p>There were two high-level choices for building communication fabric
+for large-scale clusters:</p>
+<ul>
+<li>Leveraging specialized hardware and communication protocols such as
+InfiniBand or Myrinet. This suffered from:
+<ul>
+<li>More expensive.</li>
+<li>Not natively compatible with TCP/IP applications.</li>
+</ul></li>
+<li>Leverage commodity Ethernet switches &amp; routers supporting
+familiar management infra with unmodified apps, OSs and H/W. But
+aggregate cluster bandwidth scales poorly with cluster size. This
+suffered from:
+<ul>
+<li>Oversubscription to reduce costs.</li>
+<li>Using non-commodity 10Gbps (2008) switches &amp; routers at the
+higher levels to reduce oversubscription.</li>
+<li>Typical single path IP routing along trees of interconnected
+switches means that overall cluster bandwidth is limited by the
+bandwidth available at the root.</li>
+</ul></li>
+</ul>
+<p>The paper shows that by interconnecting commodity switches in a
+fat-tree architecture achieves the full bisection bandwidth of clusters
+consisting of 10s of 1000s of nodes. 48-port Ethernet switches is
+capable of providing full bandwidth to up to 27,648 nodes.</p>
+<ul>
+<li><em>Scalable interconnection bandwidth</em>: Any host can
+communicate with another host at full bandwidth of its local network
+interface.</li>
+<li><em>Economies of scale</em>: Leverage economies of scale to make
+cheap off-the-shelf Ethernet switches the basis for large-scale data
+center networks like in cluster computing.</li>
+<li><em>Backward compatibility</em>: Compatibility with hosts running
+IP/Ethernet with minimal modifications on existing switches.</li>
+</ul>
+<h3 id="current-data-center-network-topologies">Current Data Center
+Network Topologies</h3>
+<p>Based on best practices as of 2008.</p>
+<h4 id="topology">Topology</h4>
+<p>Consisted of 2- or 3-level trees of switches or routers.</p>
+<ul>
+<li>A 3-tier design has a core tier in the tree root, an aggregation
+tier in the middle, and an edge tier at the leaves. Supports ~10,000
+hosts.</li>
+<li>A 2-tier design has only the core tier and the edge tier. Supports
+5000-8000 hosts.</li>
+</ul>
+<p>Two types of switches are used:</p>
+<ul>
+<li>48-port GigE with four 10 GigE uplinks at the edge</li>
+<li>128-port 10 GigE switches at the core</li>
+</ul>
+<h4 id="oversubscription">Oversubscription</h4>
+<p>Oversubscription is the ratio of the worst case achievable aggregate
+bandwidth among the end hosts to the total bisection bandwidth of a
+particular communication topology. Typical designs are oversubscribed by
+a factor of 2.5:1 (400 Mbps) to 8:1 (125 Mbps) for cost reasons.</p>
+<h4 id="multi-path-routing">Multi-path Routing</h4>
+<p>Delivering full-bandwidth between arbitrary hosts requires
+multi-rooted tree (multiple core switches) in large clusters. So, most
+enterprise core switches support ECMP (Equal Cost Multi Path) routing.
+Without ECMP, a single rooted 128-port 10 GigE core switch with 1:1
+oversubscription can support only 1,280 nodes.</p>
+<p>ECMP performs static load splitting among flows. This suffers
+from:</p>
+<ul>
+<li>Doesn&#x2019;t account for flow bandwidth in allocation decisions leading
+to oversubscription for simple communication patterns</li>
+<li>ECMP implementations limited path multiplicity to 8-16 (2008);
+larger data centers require more for higher bisection bandwidth</li>
+<li>Number of routing table entries grows multiplicatively with number
+of paths which increases cost &amp; lookup latency</li>
+</ul>
+<h4 id="cost">Cost</h4>
+<ul>
+<li>The switching h/w to interconnect 20,000 hosts with full bandwidth
+(1:1) among all hosts costs $37,000,000 (2008). A Fat-tree built from
+only 48-port GigE switches would support 27,648 hosts at 1:1
+oversubscription for $8,640,000 (2008).</li>
+<li>There is no requirement of higher speed uplinks in the fat-tree
+topology.</li>
+<li>It is technically infeasible to build a 27,648-node cluster with 10
+GigE switches without fat-tree architecture, even though it would cost
+over $690,000,000 (2008).</li>
+</ul>
+<h4 id="clos-networksfat-trees">Clos Networks/Fat-Trees</h4>
+<p>Charles Clos of Bell Labs designed a network topology that delivers
+high b/w for many end devices by interconnecting smaller commodity
+telephone switches in 1953. Fat-tree is a special instance of Clos
+topology.</p>
+<p>A $k$-ary fat tree has:</p>
+<ul>
+<li>$k$ pods, each containing
+<ul>
+<li>two layers of $k/2$ switches (edge layer and aggregation layer)</li>
+<li>each $k$-port switch in lower layer (edge layer) is connected to
+$k/2$ hosts, and $k/2$ upper-layer (aggregation layer) switches</li>
+</ul></li>
+<li>$(k/2)*2$ $k$-port core switches
+<ul>
+<li>each core switch has $i$th port connected to $i$th pod such that
+consecutive ports in the aggregation layer of each pod switch are
+connected to core switches on $(k/2)$ strides.</li>
+</ul></li>
+</ul>
+<p>A fat-tree built with $k$-port switches supports $\frac{k^3}{4}$
+hosts.</p>
+<p>Advantages:</p>
+<ul>
+<li>All switching elements can be homogeneous (not required) enabling
+use of cheap commodity switches even at the core.</li>
+<li>Fat-trees are rearrangeably non-blocking: For arbitrary
+communication patterns, there is some set of paths that will saturate
+all the bandwidth available to the ends hosts (1:1 oversubscription). In
+practice, we might need to trade this off for avoiding TCP packet
+reordering at end host.</li>
+<li>All hosts connected to same edge switch forms their own subnet (this
+traffic is switched, no routing)</li>
+</ul>
+<p>Challenges:</p>
+<ul>
+<li>IP/Ethernet networks typically use single routing path between
+source and destination. The paper describes simple extension to IP
+forwarding to leverage high fan-out in fat-trees.</li>
+<li>Significant wiring complexity. The paper presents packaging and
+placement techniques to mitigate.</li>
+</ul>
+<h3 id="architecture">Architecture</h3>
+<p>Achieving maximum bisection bandwidth (1:1) requires spreading
+outgoing traffic from any pod as evenly as possible among the core
+switches. There are $(k/2)^2$ shortest paths between any two hosts on
+different pods. Routing needs to take advantage of this path
+redundancy.</p>
+<h4 id="addressing">Addressing</h4>
+<ul>
+<li>All IP addresses allocated within $10.0.0.0/8$ block.</li>
+<li>Pod switches are allocated $10.pod.switch.1$ where $pod$ is the pod
+number in $[0,k-1]$ from left to right, $switch$ is $[0,k-1]$ from left
+to right, bottom to top.</li>
+<li>Core switches are allocated $10.k.j.i$ where $j$ and $i$ are the
+switch&#x2019;s coordinates in the $(k/2)^2$ core switch grid (each in
+$[1,k/2]$, starting form top-left).</li>
+<li>Host address is $10.pod.switch.ID$ where $ID$ is in $[2,k/2+1]$ from
+left to right.</li>
+</ul>
+<p>This might seem waste of address space, but simplifies building
+routing tables and actually scales to 4,200,000 hosts ($k=255$)!</p>
+<h4 id="two-level-routing-table">Two-Level Routing Table</h4>
+<ul>
+<li>Routing tables are modified to allow two-level prefix lookup for
+even-distribution. Entry in the main routing table might have an
+additional pointer to a small secondary table of $(suffix, port)$
+entries. Entries in the primary table are left-handed, and entries in
+secondary table are right-handed.</li>
+<li>If longest-matching prefix search yields a non-terminating prefix
+(in main table), then the longest-matching suffix in the secondary table
+is found and used.</li>
+<li>Can be implemented efficiently in H/W using Content-Addressable
+Memory (CAM). A CAM can perform parallel searches among all its entries
+in a single clock cycle. A Ternary CAM (TCAM) can store <em>don&#x2019;t
+care</em> bits in addition to matching 0s and 1s in particular
+positions, making it suitable for storing variable length prefixes found
+in routing tables. But CAMs have low storage density, are very power
+hungry, are expensive per bit. In this application, we need just $k$
+entries, each 32 bits wide.</li>
+<li>Left-handed (prefix) entries stores in numerically smaller addresses
+and right-handed (suffix) entries in larger addresses and encode output
+of the CAM so that numerically smallest matching address is output.</li>
+</ul>
+<h4 id="routing-algorithm">Routing Algorithm</h4>
+<ul>
+<li>Pod switches: The edge layer &amp; aggregation layer acts as
+filtering traffic diffusers: they have terminating prefixes to the
+subnets in the pod. For other outgoing inter-pod traffic, the pod
+switches have a default $/0$ prefix with a secondary table matching host
+IDs:
+<ul>
+<li>This causes traffic to be evenly spread upwards among outgoing links
+to the core switches.</li>
+<li>Also causes subsequent packets to same destination host to follow
+same path avoid packet reordering.</li>
+</ul></li>
+<li>Core switches: Contains only terminating $/16$ prefixes pointing to
+their destination pods.</li>
+<li>No switch in the network contains a table with more than $k$
+first-level prefixes or $k/2$ second-level suffixes.</li>
+<li>If two flows from same source subnet are destined to same
+destination subnet, single-path IP routing would route both flows to
+same path which eliminates fan-out benefits of fat-tree. The two-level
+routing avoids this.</li>
+</ul>
+<h5 id="flow-classification">Flow Classification</h5>
+<p>This is an optional dynamic routing technique alternative to
+two-level routing above. This performs flow classification with dynamic
+port-reassignment in pod switches to overcome local congestion (two
+flows competing for same output port in presence of another equal cost
+port).</p>
+<p>A flow is a sequence of packets with the same entries for a subset of
+fields of the packet headers (e.g.&#xA0;source and destination IP addresses,
+destination port).</p>
+<p>Pod switches performs flow classification:</p>
+<ul>
+<li>Recognize subsequent packets of same flow and forward them on the
+same outgoing port. This avoids packet reordering.</li>
+<li>Periodically reassign a minimal number of flow output ports to
+minimize disparity between aggreate flow capacity of different ports.
+This ensures fair distribution on flow on upward-pointing ports in the
+face of dynamically changing flow sizes.</li>
+</ul>
+<h4 id="flow-scheduling">Flow Scheduling</h4>
+<p>The distribution of transfer times and burst lengths of internet
+traffic is long tailed. Routing large long-lived flows plays most
+important role in determining achievable bisection bandwidth of a
+network. We want to schedule large flows to minimize overlaps with one
+another.</p>
+<ul>
+<li>Edge switches: Assigns a new flow to least-loaded port initially.
+Sends periodic notifications to a central scheduler specifying the
+source and destination of all active large flows. This is a request for
+placement of that flow in an uncontended path.</li>
+<li>Central scheduler (replicated): Tracks all flows and tries to assign
+them non-conflicting paths if possible. Linearly searches through the
+$(k/2)^2$ core switches (corresponding to each equal cost path), and
+finds one whose path components do not include a reserved link. Garbage
+collects old flows and reservations.</li>
+</ul>
+<h4 id="fault-tolerance">Fault Tolerance</h4>
+<p>We can leverage the path redundancy between any two hosts. Each
+switch maintains a Bidirectional Forwarding Detection (BFD) session with
+each neighbor. We need redundancy at edge-layer to tolerate edge
+failures.</p>
+<ul>
+<li>Failure in edge-to-aggregation link
+<ul>
+<li>Traffic type 1: outgoing inter- and intra-pod to edge switch: this
+switch sets cost of broken link to infinity and never assigns it to new
+flows.</li>
+<li>Traffic type 2: intra-pod traffic to aggregation switch: this switch
+broadcasts a tag notifying all other edge switches in same pod to not
+use the broken link.</li>
+<li>Traffic type 3: inter-pod traffic to aggregation switch: this switch
+broadcasts a tag to all core switches to not use the broken link. The
+core switches can mirror the tag to all other aggregation switches in
+other pods to not use the broken link.</li>
+</ul></li>
+<li>Failure in aggregation-to-core link
+<ul>
+<li>Traffic type 1: outgoing inter-pod traffic to aggregation switch:
+this switch removes link from local routing table and locally chooses
+another core switch.</li>
+<li>Traffic type 2: incoming inter-pod traffic to core switch: core
+switch broadcasts tag to all other aggregation switches in other pods to
+avoid using the broken link.</li>
+</ul></li>
+</ul>
+<p>This mechanism is reversed when failed links and switches come back
+up and reestablish their BSD sessions.</p>
+<h4 id="power-and-heat-issues">Power and Heat Issues</h4>
+<ul>
+<li>10 GigE switches consume roughly double the Watts/Gbps and dissipate
+roughly 3x heat of commodity GigE switches. This is two more reasons to
+use commodity switches. (2008)</li>
+<li>For an interconnect supporting ~27,000 hosts, the fat-tree
+architecture uses more switches (2,880 Netgear GSM 7252S) but with 56.6%
+less power consumption and 56.5% less heat dissipation than typical
+hierarchical designs (576 ProCurve 2900 edge switches and 54 BigIron
+RX-32 switches, 36 in aggregation and 18 in core).</li>
+</ul>
+<h3 id="implementation-evaluation-results">Implementation, Evaluation
+&amp; Results</h3>
+<ul>
+<li>They implemented a prototype using NetFPGAs. The NetFPGA contains an
+IPv4 router implementation that leverages TCAMs. The routing table
+lookup routine modifications totaled &lt; 100 LOC and introduced no
+measurable lookup latency.</li>
+<li>They built a prototype using Click, a modular software router
+architecture that supports implementation of experimental router
+designs.</li>
+<li>To measure the total bisection bandwidth of fat-tree design, they
+generate a benchmark suite of communication mappings to evaluate the
+performance of the 4-port fat-tree using two-level routing, flow
+classification, and flow scheduling and compared to a standard
+hierarchical tree with a 3.6:1 oversubscription.</li>
+<li>With dynamic flow assignment and re-allocation, the flow classifier
+outperforms both the traditional tree &amp; two-level table with a worst
+case bisection bandwidth of ~75%. It is imperfect because it avoids only
+local congestions.</li>
+<li>The flow scheduler acts on global knowledge and tries to assign
+large flows to disjoint paths, achieving 93% of ideal bisection
+bandwidth for random communication mappings.</li>
+</ul>
+<h3 id="packaging">Packaging</h3>
+<p>Increased wiring overhead is inherent to the fat-tree topology. They
+present an approach in the context of 27,648-node cluster with 48-port
+GigE switches where each pod consists of 576 machines and 48 switches.
+Suppose each host takes 1RU (1 Rack Unit) and 1 rack can accommodate 48
+machines. There are 576 core switches.</p>
+<ul>
+<li>Each pod has 12 racks of 48 machines each.</li>
+<li>All the 48 switches in the pod are packed in a single monolithic
+unit with 1,152 user-facing ports.
+<ul>
+<li>576 of these 1152 ports connect directly to machines.</li>
+<li>576 of these 1152 ports fan out to one port on each of the 576 core
+switches.</li>
+<li>1152 internal ports are wired to other switches in the same pod
+(edge-aggregation interconnects).</li>
+</ul></li>
+<li>Each of the 48 pods houses 12 core switches.
+<ul>
+<li>Of the 576 cables from a packed pod switch rack, 12 connects
+directly to core switches place near the pod.</li>
+<li>The rest fans out to other pods in sets of 12 to core switches
+housed in remote pods.</li>
+</ul></li>
+</ul>
+<p>The cable sets move in sets of 12 from pods to pod and in sets of 48
+from racks to pod switches. This is opportunity for cable packaging to
+reduce wiring complexity.</p>
+<p>The 12 racks can be placed around pod switch rack in two dimensions
+to reduce cable length. The 48 pods can be layed out in a 7x7 grid to
+reduce inter-pod cabling distance and can support standard cable lengths
+&amp; packaging.</p>
+<h2 id="strengths-weaknesses">Strengths &amp; Weaknesses</h2>
+<h3 id="strengths">Strengths</h3>
+<ul>
+<li>The paper presents a novel and important contribution to data center
+cluster interconnections. The paper solves the scalable bandwidth
+problem which affected data centers in a cost effective manner. The
+authors bring the cluster-computing idea of displacing expensive,
+high-end machines by clusters of commodity PCs to data center
+interconnects by leveraging large number of commodity GigE switches to
+displace high-end switches. Even though the fat-tree topology is not
+novel (used for telephone switching), the authors solve the
+architectural and implementation challenges of standard IP single-path
+routing using novel IP addressing scheme and two-level routing mechanism
+that require minimal modification to existing switches without breaking
+backward compatibility of TCP/IP/Ethernet stack prevalent in data
+centers.</li>
+<li>Also, they alleviate the ECMP challenge of static load splitting of
+flows which disregards flow bandwidth by proposing their own simple flow
+classification by dynamic port reassignment, which is stateful but can
+fall back to two-level routing in case of lost state. In addition, they
+attempt to maximize achievable bisection bandwidth by introducing flow
+scheduling to direct large flows to use uncontended paths, and also
+introduces simple fault tolerance schemes to tolerate link and switch
+failures.</li>
+<li>They acknowledge the problem of power and heat issues which is an
+important practical consideration in deployments of new technologies in
+the data center. They provide sufficient empirical evidence for their
+case of using larger number of commodity switches against expensive,
+high-end switches.</li>
+</ul>
+<h3 id="weaknesses">Weaknesses</h3>
+<ul>
+<li>Flow scheduling is impractical in real-world deployments. The use of
+a centralized scheduler with knowledge of all active flows and the
+status of all links is infeasible for large arbitrary networks. The
+regularity of the fat-tree topology can simplify the search for
+disjoint, uncontended paths but this study is not undertaken. Flow
+scheduling as they do it is infeasible.</li>
+<li>They attempt to solve the cabling problem with clever packaging. But
+they make some good number of assumptions: each host takes up 1RU,
+individual racks accomodating 48 machines, and packing 48 switches in a
+single rack. This puts constraint on the data center operator to trade
+away some other placement requirements to accomodate the fat-tree
+interconnect requirements.</li>
+<li>The experiments in power and heat issues are not made in real
+deployments of the design. It would be interesting to see if the real
+world deployments conform with their findings. There might be other
+practical overheads associated with using a large number of commodity
+switches.</li>
+</ul>
+<h2 id="follow-on">Follow-on</h2>
+<ul>
+<li>As mentioned in the weaknesses, one important follow-on is to
+investigate more practical designs for the flow scheduling problem at
+hyperscalar scale. At large scales, it is infeasible to maintain the
+required large state for their described mechanism to work.</li>
+<li>Study the practical (power, heat, cooling issues) in a realistic
+deployment of the fat-tree design. It would be interesting to find
+issues not mentioned in the paper.</li>
+<li>Investigate the performance with fault tolerance mechanisms like
+Bidirectional Forwarding Detection (BFD) active in a real data-center
+deployment. The achievable bisection bandwidth would correspond to more
+realistic values.</li>
+</ul>
+<hr />
+  </div>
+
+  <script type="text/javascript" src="../js/mathjax_config.js"></script>
+	<script>
+		(function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+		(i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+		m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+		})(window,document,'script','https://www.google-analytics.com/analytics.js','ga');
+
+		ga('create', 'UA-90310997-2', 'auto');
+		ga('send', 'pageview');
+	</script>
+</body>
+</html>
