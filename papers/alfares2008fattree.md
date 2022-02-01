@@ -52,9 +52,9 @@ ECMP performs static load splitting among flows. This suffers from:
 
 #### Cost
 
-- The switching h/w to interconnect 20,000 hosts with full bandwidth (1:1) among all hosts costs $37,000,000 (2008). A Fat-tree built from only 48-port GigE switches would support 27,648 hosts at 1:1 oversubscription for $8,640,000 (2008).
+- The switching h/w to interconnect 20,000 hosts with full bandwidth (1:1) among all hosts costs \$37,000,000 (2008). A Fat-tree built from only 48-port GigE switches would support 27,648 hosts at 1:1 oversubscription for \$8,640,000 (2008).
 - There is no requirement of higher speed uplinks in the fat-tree topology.
-- It is technically infeasible to build a 27,648-node cluster with 10 GigE switches without fat-tree architecture, even though it would cost over $690,000,000 (2008).
+- It is technically infeasible to build a 27,648-node cluster with 10 GigE switches without fat-tree architecture, even though it would cost over \$690,000,000 (2008).
 
 #### Clos Networks/Fat-Trees
 
