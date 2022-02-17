@@ -1,0 +1,143 @@
+# LegoOS: A Disseminated, Distributed OS for Hardware Resource Disaggregation
+
+Paper: [Yizhou Shan, Yutong Huang, Yilun Chen, and Yiying Zhang. 2018. LegoOS: a disseminated, distributed OS for hardware resource disaggregation. In Proceedings of the 13th USENIX conference on Operating Systems Design and Implementation (OSDI'18). USENIX Association, USA, 69–87.](https://dl.acm.org/doi/10.5555/3291168.3291175)
+
+Modern data centers deploy a bunch of racks, each rack having monolithic servers. The essential organization of a monolithic server has a motherboard which hosts a processor, memory and some storage devices and we run a OS or hypervisor on top of it. The monolithic server has been a unit of deployment in DCs for decades.
+
+*Can it still satisfy all DC needs?*
+
+1. *Resource Allocation*
+In case of monolithic free CPU and memory resources in different servers might not fit the required CPU and memory resources for a specific job. To schedule it, we have to find a server that can provide both enough CPU and enough memory. In general, monolithic servers make "resource packing" difficult.
+
+2. *Heterogeneity*
+More heterogeneous hardware like FPGA, TPU, NVM are making their way into DCs. Unfortunately most existing servers are not planned beforehand - there might be no extra PCI slots for the extra devices.
+
+3. *Elasticity*
+It is hard to add, remove or reconfigure devices after the service has been deployed.
+
+4. *Fault Tolerance*
+Monolithic servers have coarse-grained failure domains. Whenever we have CPU or memory controller failure, it means the whole server is down though the other components are still working properly.
+
+*How to improve resource utilization, elasticity, heterogeneity and fault tolerance?*
+
+We need to go beyond physical server boundary. This approach is called Hardware Resource Disaggregation: breaking monolithic servers into network-attached, independent hardware components. We break a server into multiple hardware components - each component has it's own controller and it's own network interface and each one can run on it's own and talk to each other through network. This disaggregated architecture will solve the limitations mentioned above & meet future applications and hardware needs.
+
+*Is it feasible to build a disaggregated data center currently?*
+It is possible because of several recent trends:
+
+1. *Network is faster.*
+For e.g., InfiniBand can already provide 200 Gbps bandwidth, 600 ns latency. Optical Fabric can even reach 400 Gbps bandwidth, and 100 ns latency. So, the cost of accessing remote resource is not that high.
+
+2. *More processing power is pushed into the device.*
+Devices like SmartNIC, SmartSSD, PIM (Processing In Memory) can run quite complex logic. Each hardware can run on it's own.
+
+3. *Network interface is also moving closer to device.*
+Both Intel's Omni-Path, Mellanox's Innova-2 have network logic on the board. In fact, many companies and academic institutions have been looking to this direction, such as Intel Rack Scale System, Berkeley Firebox, HP "The Machine", IBM Composable System and dReDBox from Europe.
+
+### Kernel Architectures for Resource Disaggregation
+
+Resource disaggregation is a complete divergence from traditional computing paradigm. How can a data center manage a cluster of aggregate devices? What operating system should we run? Let's look at some typical kernel designs.
+
+1. *Monolithic kernel or microkernel*
+They run on and manage a monolithic server. They assume they have local access to manage shared resources like memory, NIC and disk.
+
+2. *Multikernel*
+Several recent kernels use a multi-kernel design, where they run a kernel on each core or programmable device within a server. They also assume they have local access to other resources.
+
+*So, are they a good fit for resource disaggregation?*
+
+1. *Access remote resources*
+The first issue is what used to be within a monolithic server are now across network. Existing kernels can net not handle this remote accesses.
+
+2. *Distributed resource management*
+In a disaggregated cluster, we have many hardware resources, and we need to manage them. And no existing kernels can handle this distributed network partitioned resources.
+
+3. *Fine-grained failure handling*
+Each component can fail independently. And no existing kernels can provide this fine-grained failure handling.
+
+*So what operating system shall we run?*
+
+The idea is when hardware is disaggregated, the operating system should be also. They break OS subsystems based on its functionality. They run process management on top of processor, virtual memory system on memory and file systems on storage devices. Based on this idea, they propose the split-kernel architecture.
+
+Design principles for split-kernel architecture:
+
+1. Separate OS functionalities into monitors
+
+2. Run those monitors directly on hardware devices.
+This design makes it simple to integrate new hardware. To deploy a new device, we only need to implement a device, write a monitor and then just attach to the network.
+
+3. Not supporting coherency between components.
+Doing so can greatly reduce network traffic. Non-coherent components communicate on the network via explicit message passing.
+
+4. Manage distributed resources and handle failures.
+
+Based on this split-kernel architecture, they build LegoOS, the first disaggregated operating system for hardware resource disaggregation.
+
+### LegoOS Design and Implementation
+
+#### Abstraction
+
+*How can LegoOS appear to users? Should it appear as a set of hardware devices, or as a giant machine, a single system image?*
+
+Their answer is somewhere in the middle: appear as a set of virtual nodes, vNodes. vNode is similar to a virtual machine. It has its unique vID, unique virtual IP address vIP, and storage mounting points. But different from a traditional VM, a vNode can run on multiple hardware devices. Each hardware device can host multiple vNodes. They also support backward Linux ABI compatibility, i.e., they can run unmodified Linux system calls. And internally they use an indirection layer to translate Linux interface to LegoOS interface. Doing so can greatly ease the adoption of LegoOS.
+
+#### Design
+
+They have five main designs principles:
+
+1. Cleanly separate OS functionalities into monitors.
+
+2. Build monitors with hardware constraints in mind.
+
+3. RDMA-based message passing for both kernel and applications.
+
+4. Use a two-level approach to manage distributed resource.
+
+5. Use replication to handle memory failures.
+
+
+*Separating Processor and Memory*
+
+The first thing they do is move the memory resource, DRAM, across network. In addition to moving DRAM, they also move the memory related hardware units such as TLB or MMU across network to the memory component. They move the virtual memory system to the memory component as well and they run it in the controller of the memory component. And after moving all these units, now the processor only sees virtual memory addresses. And because of that, they change all levels of cache to virtual cache, which is virtually indexed and virtually tagged. The memory components manage both virtual and physical memory. Now they separated processor and memory, but they still have one challenge to solve - the performance, based on the fact that network is still slower than local memory bus, especially the latency. Simply moving everything across network will not work. Their solution is to add some small DRAM or High Bandwidth Memory on the processor side. Instead of using it as a traditional main memory, they use it as an extended cache, ExCache. The ExCache is managed by both software and hardware. And it is also inclusive, virtual cache. They also separate storage.
+
+*Distributed Resource Management*
+
+They use a two level approach to manage distributed resources. They built several global managers to do coarse grained resource allocation, load balancing and failure handling. They separate them into three global managers, Global Process Manager, Global Memory Manager and the Global Storage Manager. At each hardware, they do fine-grained resource allocation.
+
+*Example: Distributed Memory Management*
+
+They first chop User Virtual Address Space into fixed-sized coarse-grain virtual regions, vRegions. It can be configured such as 1 GB. The Global Memory Manager (GMM) will assign vRegions to memory components when applications call the virtual memory allocation system call, such as `mmap`, and GMM makes the decision on where to create a vRegion based on global resource loads. Each owner of a vRegion can do fine-grained virtual memory allocation, allocates physical memory on demand, and handle memory accesses.
+
+#### Implementation & Emulation
+
+- They implement LegoOS using commodity x86 servers. They have 206k SLOC code and support 113 common Linux system calls.
+- To emulate a processor, they reserve a small DRAM at boot time as the ExCache, the hit path is managed by h/w and the miss path is managed by LegoOS.
+- To emulate memory, they only enable a limited number of course, to emulate the effects of constrained hardware components.
+- As for the storage and Global Resource Monitors, they implement that as Linux kernel modules to avoid all the engineering efforts to implement device drivers.
+- And for network stack, they use RDMA-based RPC framework based on LITE (SOSP '17).
+
+### Performance Evaluation
+
+They run unmodified TensorFlow with CIFAR-10 data set workload. The working set is around 0.9 GB and they run 4 threads. The baseline of all these experiments is running TensorFlow on Linux with unlimited memory, which is the best performance. And they compared to several swapping systems, swap-to-SSD, swap-to-ramdisk, and InfiniSwap. LegoOS outperforms all existing solutions. In fact, LegoOS only incurs 1.3 to 1.7 slowdown when disaggregating all resources and in return, we gain much better resource packing, elasticity and fault tolerance.
+
+LegoOS is a research operating system, but it is not the only way to build a split-kernel. But it demonstrates that it is feasible to disaggregate both hardware and operating system.
+
+## Strengths
+
+- This work addresses the limitations of monolithic servers and hardware resource disaggregation provide a promising viable solution for future data centers by proposing the split-kernel architecture and LegoOS. LegoOS is the first OS designed for hardware resource disaggregation demonstrating the feasibility of resource disaggregation and its advantages in better resource packing, failure isolation, and elasticity, all without changing Linux ABIs.
+
+- The strategy they follow during implementation of LegoOS is to stick the principle of "clean separation of functionalities". But they relax the clean separation principle for frequently-accessed, performance-critical operations. For example, permission checking for read-only pages: if they did clean separation, then permission checking should reside in the memory component, and we need to go across the network for permission check and then for the actual page retrieval, but they relax the clean-separation principle by caching some information in the processor component to be able to do permission checking in the processor.
+
+## Weaknesses
+
+- Virtualization is a common need in data centers, and it is unclear how LegoOS can support virtualization in the data center, or even how the split-kernel approach can be modified for virtualization. Virtualization deals with multiple OS subsystems, and implementing it on a disaggregated, distributed OS could be very complicated.
+
+- The authors evaluate LegoOS' performance with two applications: TensorFlow (using CIFAR-10 dataset) and Phoenix (using a Wikipedia dataset), a single node multi-threaded implementation of MapReduce. One can argue that this is not representative enough to generalize the evaluated results on a broader class of applications. They do not provide any justification for this choice of applications for the evaluation study in the paper.
+
+## Future Work
+
+- Support for memory data migration. From investigating load balancing, they found that memory allocation policies across memory components can affect application performance, and supporting memory migration plays a big role. This is a specific instance of the more general challenge of large-scale resource management of a disaggregated cluster.
+
+- Explore how to support virtualization in LegoOS as mentioned above.
+
+- Explore the unsolved challenges such as the security, network topology, congestion control in disaggregated resource environments.
