@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Papers</title>
+  <link href='../css/style.css' rel='stylesheet'>
+  <meta name=viewport content="width=device-width, initial-scale=1">
+</head>
+
+<body>
+  <div id=header>
+    <a href="../">Papers</a>
+  </div>
+  <div id="container">
+<h1 id="network-requirements-for-resource-disaggregation">Network
+Requirements for Resource Disaggregation</h1>
+<p><a href="https://dl.acm.org/doi/10.5555/3026877.3026897">Peter X.
+Gao, Akshay Narayan, Sagar Karandikar, Joao Carreira, Sangjin Han,
+Rachit Agarwal, Sylvia Ratnasamy, and Scott Shenker. 2016. Network
+requirements for resource disaggregation. In <i>Proceedings of the 12th
+USENIX conference on Operating Systems Design and Implementation</i>
+(<i>OSDI&#x2019;16</i>). USENIX Association, USA, 249&#x2013;264.</a></p>
+<p>Recent industry trends suggest a paradigm shift to a disaggregated
+datacenter (DDC) architecture containing a pool of resources, each built
+as a standalone resource blade and interconnected using a network
+fabric. This work derives the minimum latency and bandwidth requirements
+that the network in DDCs must provide to avoid degrading app-level
+performance &amp; explores the feasibility of meeting these requirements
+with existing system designs and commodity networks, in the context of
+10 workloads spanning 7 open-source systems:</p>
+<ul>
+<li>Hadoop</li>
+<li>Spark</li>
+<li>GraphLab</li>
+<li>Timely dataflow</li>
+<li>Spark Streaming</li>
+<li>memcached</li>
+<li>HERD</li>
+<li>SparkSQL</li>
+</ul>
+<p>The workloads can be classified into two classes based on their
+performance characteristics.</p>
+<ul>
+<li>Class A: Hadoop Wordcount, Hadoop Sort, Graphlab, &amp;
+Memcached</li>
+<li>Class B: Spark Wordcount, Spark Sort, Timely, SparkSQL BDB,
+HERD</li>
+</ul>
+<p>The work makes the following assumptions:</p>
+<ul>
+<li>Hardware Architecture:
+<ul>
+<li>Partial CPU-memory disaggregation: Each CPU blade retains some
+amount of local memory that acts as a cache for remote meory dedicated
+for cores on that blade.</li>
+<li>Cache coherence domain is limited to a single compute blade: An
+external network fabric is unlikely to support the latency &amp;
+bandwidth requirements for inter-CPU cache coherence.</li>
+<li>Resource Virtualization: Each resource blade must support
+virtualization of its resources for logical aggregations into
+higher-level abstractions such as VMs or containers.</li>
+<li>Scope of disaggregation: Either rack or datacenter-scale. This is a
+&#x201C;design knob&#x201D;. In a hypothetical DC-scale disaggregated system,
+resources assigned to a single VM could be selected from anywhere in the
+DC.</li>
+<li>Network designs: This depends on the assumed scope of
+disaggregation. Existing DDC prototypes use specialized, proprietary
+network designs.</li>
+</ul></li>
+<li>System Architecture:
+<ul>
+<li>System abstractions for logical resource aggregations: VMs. We can
+implement resource allocation &amp; scheduling in terms of VMs. Depends
+on scope of disaggregation: for rack-scale, a VM is assigned resource
+from within a single rack, and for DC-scale, a VM is assigned resources
+from anywhere in the DC.</li>
+<li>Hardware organization: &#x201C;Mixed&#x201D; organization in which each rack hosts
+a mix of different types of resource blades, as opposed to a
+&#x201C;segregated&#x201D; organization in which a rack is populated with a single
+resource type. This leads to more uniform communication patterns &amp;
+permits optimizations to localize communication.</li>
+<li>Page-level remote memory access: Assume CPU blades access remote
+memory at page-granularity (4KB in x86) instead of the typical memory
+access between CPU and DRAM occurs in unit of a cache-line size (64B in
+x86). This exploits spatial locality in memory access patterns.</li>
+<li>Block-level distributed data placement: Apps in DDC reads/writes
+large files at sector-granularity (512B in x86). The disk block address
+space is range-partitioned into blocks, uniformly distributed across
+disk blades.</li>
+</ul></li>
+</ul>
+<p>The design knobs in the study are:</p>
+<ul>
+<li>the amount of local memory on compute blades</li>
+<li>the scope of disaggregation (either rack-scale or DC-scale)</li>
+</ul>
+<p>For I/O traffic to storage devices, the current latency &amp; b/w
+requirements allow us to consolidate them into the network fabric with
+low performance impact, assuming we have a 40Gbps or 100Gbps network.
+The dominant impact to app performance comes from CPU-memory
+disaggregation.</p>
+<p>The work compares the performance of apps in a server-centric
+architecture to its performance in the disaggregated context (represents
+the worst-case in terms of potential degradation, compared to re-write).
+To emulate remote memory accesses, they implement a special swap device
+backed by some amount of physical memory rather than disk, and intercept
+all page faults &amp; injects artificial delays to emulate network RTT
+latency and bandwidth for each paging operation. This does not model
+queueing delays.</p>
+<p>The work shows the following:</p>
+<ul>
+<li><p>For Class A apps, a network with end-to-end latency of 5 micros
+&amp; b/w of 40 Gbps is sufficient for performance penalty within 5%.
+Class B apps require network latencies of 3 micros &amp; b/w 40-100 Gbps
+for performance penalty within 10%. Performance for Class B apps is very
+sensitive to network latency.</p>
+<ul>
+<li>They show that end-to-end latencies estimated fail to meet the
+target latencies for either Class A or Class B apps. The overhead of
+network software is the key barrier to realizing disaggregation with
+current networking technologies. They consider two potential
+optimizations and technologies to reduce latencies (&amp; integrating
+them):
+<ul>
+<li>Using RDMA. RDMA bypasses the packet processing in the kernel
+eliminating the OS overheads.</li>
+<li>Using NIC integration. Integrating the NIC functions closer to the
+CPU reduces the overheads associated with copying data to/from the
+NIC.</li>
+</ul></li>
+<li>After assuming RDMA + NIC Integration, Class A jobs can be scheduled
+at blades distributed across the DC, Class B jobs will need to scheduled
+within a rack.</li>
+<li>New links &amp; switches would bring cross-rack latency down enough
+to enable true DC-scale disaggregation (along with RDMA + NIC
+Integration).</li>
+<li>Managing network congestion to achieve 0 or close-to-0 queueing is
+essential.</li>
+</ul></li>
+<li><p>Increasing b/w beyond 40 Gbps offers little improvement in
+app-level performance. This is easily met: 40Gbps are available in
+commodity DC switches &amp; server NICs.</p></li>
+<li><p>Increasing the amount of local memory beyond 40% has little to no
+impact on performance degradation. This requirement is feasible:
+compatible with demonstrated h/w prototypes.</p></li>
+<li><p>Overall memory b/w is well correlated with resultant performance
+degradation. Thus, an app&#x2019;s memory b/w requirements serves as a rough
+indicator of its expected degradation under disaggregation without
+requiring any instrumentation.</p></li>
+</ul>
+<p>The work then evaluates the impact of queueing delay. They collect a
+remote memory access trace from their instrumentation tool: a network
+access trace using tcpdump and a disk access trace using blktrace. Then,
+they translate these traces to network flows in their simulated
+disaggregated cluster. They consider five protocols and use simulation
+to evaluate their network-layer performance measured in FCT (Flow
+Completion Time) under the generated traffic workloads:</p>
+<ul>
+<li>TCP</li>
+<li>DCTCP, which leverages ECN (Explicit Congestion Notification)</li>
+<li>pFabric, prioritizes short flows</li>
+<li>pHost, emulates pFabric but using scheduling at the end hosts</li>
+<li>FastPass, a centralized scheduler that schedules every packet</li>
+</ul>
+<p>They find the following:</p>
+<ul>
+<li>The relative ordering in mean slowdown is consistent with prior
+results but their absolute values are higher. This is due to differences
+in traffic workloads used in original measurements.</li>
+<li>pFabric performs best, and they use pFabric FCTs as the memory
+access times in the emulation (as artificial delays).</li>
+<li>Inclusion of queuing delay does have a non-trivial impact on
+performance degradation. 100 Gbps links are both required and sufficient
+to contain the performance impact of queuing delay.</li>
+</ul>
+<p>The authors also built a kernel-space RDMA block device driver which
+serves as swap device. The local CPU can now swap to remote memory
+instead of disk.</p>
+<ul>
+<li>They batch block requests sent to RDMA NIC.</li>
+<li>They merge requests with contiguous addresses into a single large
+request.</li>
+<li>They allow asynchronous RDMA requests: created a data structure to
+keep track of outgoing requests &amp; notify the upper layer immediately
+for each completed request.</li>
+<li>The software overhead of swapping is 2.46 microseconds on a
+commodity Linux desktop. This suggests that low-latency access to remote
+memory can be realized.</li>
+</ul>
+<h2 id="strengths">Strengths</h2>
+<ul>
+<li>This paper is an early work for network requirements for
+disaggregation and is the earliest effort at evaluation the minimum
+bandwidth &amp; latency requirements that the network in disaggregated
+datacenters must provide. They keep app-level performance degradation
+within 5% and also discuss about the feasibility of their findings with
+existing network designs &amp; technologies.</li>
+<li>They use a clever combination of emulation, simulation &amp;
+implementation for doing this study. This is challenging because there
+is no real disaggregated environment and much more harder in an academic
+environment. They use an extensive suite of 10 workloads (without
+modifying their server-centric architecture) spanning 7 open-source
+systems.</li>
+</ul>
+<h2 id="weaknesses">Weaknesses</h2>
+<ul>
+<li>Approaches such as Fastpass which introduces a centralized scheduler
+scheduling every packet is impractical in datacenter settings. They also
+optimistically assume that the scheduler&#x2019;s decision logic incurs no
+overhead. These assumptions will likely not hold true in a practical
+setting.</li>
+<li>Their evaluation results might be impacted by testbed-centric
+interferences. Even though they run experiments on Amazon EC2 cluster
+and enable EC2&#x2019;s Virtual Private Network capability in their cluster to
+ensure no interference with other instances, there might be
+testbed-induced bias in the results. But, this is the best one can do
+for such a study.</li>
+</ul>
+<h2 id="future-work">Future Work</h2>
+<p>There are numerous directions for future work:</p>
+<ul>
+<li>Generalization of the results in the paper to other systems and
+workloads.</li>
+<li>Design and implementation of a &#x201C;disaggregation-aware&#x201D; scheduler.
+<ul>
+<li>In particular, based on the type of application (Class A or Class
+B), the scheduler should be able to resource allocate according to the
+scope of disaggregation: rack-scale or DC-scale, for maximum app-level
+performance.</li>
+</ul></li>
+<li>Adoption of low-latency network software &amp; hardware at
+endpoints.
+<ul>
+<li>Such as high-bandwidth links, high-radix switches, optical
+switches.</li>
+</ul></li>
+<li>Creation of new programming models that exploit disaggregation.
+<ul>
+<li>One direction is for apps to exploit the availability of low-latency
+access to large pools of remote memory.</li>
+<li>Another direction is for improving performance through better
+resource utilization. Current CPU-to-memory utilization for tasks in
+today&#x2019;s DCs varies by 3 orders of magnitudes - one can &#x201C;bin pack&#x201D; on a
+larger scale and DDCs should achieve more efficient statistical
+multiplexing.</li>
+</ul></li>
+</ul>
+  </div>
+
+  <script type="text/javascript" src="../js/mathjax_config.js"></script>
+	<script>
+		(function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+		(i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+		m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+		})(window,document,'script','https://www.google-analytics.com/analytics.js','ga');
+
+		ga('create', 'UA-90310997-2', 'auto');
+		ga('send', 'pageview');
+	</script>
+</body>
+</html>
