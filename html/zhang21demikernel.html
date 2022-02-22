@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Papers</title>
+  <link href='../css/style.css' rel='stylesheet'>
+  <meta name=viewport content="width=device-width, initial-scale=1">
+</head>
+
+<body>
+  <div id=header>
+    <a href="../">Papers</a>
+  </div>
+  <div id="container">
+<h1
+id="the-demikernel-datapath-os-architecture-for-microscale-datacenter-systems">The
+Demikernel Datapath OS Architecture for Microscale Datacenter
+Systems</h1>
+<p><a href="https://dl.acm.org/doi/10.1145/3477132.3483569">Irene Zhang,
+Amanda Raybuck, Pratyush Patel, Kirk Olynyk, Ja- cob Nelson, Omar S.
+Navarro Leija, Ashlie Martinez, Jing Liu, Anna Kornfeld Simpson, Sujay
+Jayakar, Pedro Henrique Penna, Max Demoulin, Piali Choudhury, Anirudh
+Badam. 2021. The Demiker- nel Datapath OS Architecture for
+Microsecond-scale Datacenter Systems. In ACM SIGOPS 28th Symposium on
+Operating Systems Principles (SOSP &#x2019;21), October 26&#x2013;29, 2021, Virtual
+Event, Ger- many. ACM, New York, NY, USA, 17 pages.
+https://doi.org/10.1145/ 3477132.3483569</a></p>
+<p>Datacenter systems and I/O devices now run at single-digit
+microsecond latencies, requiring ns-scale OSes. Traditional kernel-based
+OSs impose unaffordable overhead, so we eliminate the OS kernel from I/O
+datapath.</p>
+<p>Library OSes separate protection into the OS kernel and management
+into the user-level library OSes to better meet custom app needs.
+Kernel-bypass architectures offload protection into I/O devices, along
+with some OS management. We need a portable OS architecture for
+microscale kernel-bypass systems.</p>
+<p>This paper proposes Demikernel, which offers a general-purpose
+datapath OS replacement that meet the needs of microscale systems:</p>
+<h2 id="support-heterogeneous-os-offloads">1. Support Heterogeneous OS
+Offloads</h2>
+<p>Today&#x2019;s datapath architectures are adhoc - different kernel-bypass
+libraries offer different OS features atop kernel-bypass devices.
+Different devices offload different OS features. E.g. DPDK provides a
+raw NIC interface, while RDMA implements a network protocol with CC
+&amp; ordered, reliable transmission. We need to flexibly accommodate
+heterogeneous kernel-bypass devices.</p>
+<p><em>Solution: A portable datapath API &amp; flexible OS
+architecture</em></p>
+<p>Each Demikernel datapath OS works with a legacy control path OS
+kernel &amp; consists of several interchangeable libOSes implemening a
+new high-level datapath API called PDPIX (POSIX extension to support
+microscale kernel-bypass I/O). PDPIX centers around I/O queue
+abstraction instead of pipe-based POSIX. Offload OS features to device
+when possible (e.g.&#xA0;RDMA libOS offloads network stack to RDMA NIC). Each
+Demikernel libOS:</p>
+<ul>
+<li>supports a single kernel-bypass I/O device type (DPDK, SPDK,
+RDMA)</li>
+<li>I/O processing stack for the device</li>
+<li>libOS-specific memory allocator</li>
+<li>a centralized coroutine scheduler</li>
+</ul>
+<p>PDPIX is a POSIX extension tuned for kernel-bypass I/O:</p>
+<ul>
+<li><code>accept</code> returns a queue descriptor instead of a file
+descriptor.</li>
+<li><code>push</code> &amp; <code>pop</code> are for submitting &amp;
+receiving (both net &amp; storage) I/O
+<ul>
+<li>input is a scatter-gather memory pointers array to avoid buffering
+&amp; poor tail latencies.</li>
+<li>non-blocking &amp; return a <code>qtoken</code> for apps to fetch
+completion later (using <code>wait_*</code> lib calls).</li>
+</ul></li>
+<li>PDPIX requires all I/O must be from DMA-capable heap for UAF
+protection.</li>
+<li><code>wait_*</code> solves POSIX&#x2019;s <code>epoll</code>
+inefficiencies:
+<ul>
+<li><code>wait_*</code> directly returns data from the op for app to
+process immediately.</li>
+<li><code>wait_*</code> only wakes worker waiting on the specific
+<code>qtoken</code> on I/O completion.</li>
+</ul></li>
+</ul>
+<h2 id="coordinate-zero-copy-memory-access">2. Coordinate Zero-Copy
+Memory Access</h2>
+<p>Zero-copy I/O is critical for latency. Kernel-bypass zero-copy I/O
+requires 2 types of memory access coordination:</p>
+<ul>
+<li>IOMMU on I/O device needs to perform address translation. This
+requires coordination with CPU&#x2019;s IOMMU and TLB. To avoid page faults and
+ensure address mappings stay fixed during I/O, devices need designated
+DMA-capable memory, pinned in the OS kernel.</li>
+<li>Coordination among app, I/O stack and kernel-bypass device. The TCP
+stack might send memory to the NIC and if network loses the packet &amp;
+app modified or freed the memory in the meantime, the TCP stack cannot
+retransmit.</li>
+</ul>
+<p><em>Solution: DMA-capable heap with Use-After-Free
+protection</em></p>
+<p>Three new features for zero-copy memory coordination:</p>
+<ul>
+<li>portable API with I/O memory buffer ownership semantics (in PDPIX)
+<ul>
+<li>apps pass ownership to datapath OS when invoking I/O &amp; do not
+receive ownership back until I/O completes.</li>
+</ul></li>
+<li>zero-copy, DMA-capable heap
+<ul>
+<li>libOSes replaces the app&#x2019;s memory allocator to back the heap with
+DMA-capable memory in device-specific way.</li>
+<li>Each libOS use a device-specific, modified Hoard (pool-based memory
+allocator) for memory management. Hoard memory pools, superblocks, are
+allocated with memory from the DPDK mempool for DMA-capable heap.</li>
+<li>zero-copy I/O offers improvement for buffers only over 1kB.</li>
+</ul></li>
+<li>UAF protection
+<ul>
+<li>Demikernel libOS allocators do this with reference counting.</li>
+<li>no write-protection: can&#x2019;t afford to protect apps from modifying
+in-use buffers</li>
+</ul></li>
+</ul>
+<h2 id="multiplex-and-schedule-the-cpu-at-microscale">3. Multiplex and
+Schedule the CPU at microscale</h2>
+<p>Existing kernel-level abstractions like processes &amp; threads are
+too coarse-grained for microscale scheduling - they consume entire cores
+for 100s of micros. Recent schedulers schedule app workers on a
+microscale per-I/O basis and use coarse-grained abstractions for OS work
+- distributed scheduling. Scheduler should multiplex app work &amp;
+datapath OS tasks on single thread.</p>
+<p><em>Solution: Coroutines</em></p>
+<ul>
+<li>Kernel-bypass scheduling on per-I/O basis but POSIX&#x2019;s
+<code>epoll</code> &amp; <code>select</code> have &#x201C;thundering herd&#x201D;
+issue: cannot deliver events to just one worker. PDPIX introduces
+<code>wait</code> which lets app workers wait on specific I/O
+requests.</li>
+<li>Coroutines encapsulate OS &amp; app work - they are lightweight with
+low-cost context switches well-suited for state-machine-based async
+event handling. No need for expensive global state management.</li>
+<li>A centralized coroutine scheduler: Cannot afford interrupts, so
+cooperative scheduling - coroutines yield after a few micros or
+less.</li>
+<li>Three states of coroutines: running, runnable, and blocked.
+Scheduler checks only runnable ones, since many coroutines blocked on
+infrequent I/O events.</li>
+<li>Three types of coroutines:
+<ul>
+<li>one fast-path I/O processing coroutine for each I/O stack polling
+for I/O.</li>
+<li>many background coroutines for other I/O stack work:
+<ul>
+<li>sending outgoing packets</li>
+<li>retransmitting lost packets</li>
+<li>sending pure acks</li>
+<li>managing connection close state transitions</li>
+</ul></li>
+<li>one app coroutine per blocked <code>qtoken</code> for app
+worker.</li>
+</ul></li>
+<li>Single-threaded Demikernel libOS I/O stacks share app thread and aim
+for run-to-completion: the fast-path coroutine processes incoming data,
+finds the blocked <code>qtoken</code>, schedules the app coroutine &amp;
+processes any outgoing messages before moving on to the next I/O. The
+fast-path coroutine yields after every n polls to let other I/O stacks
+&amp; background work run.</li>
+<li>Using Rust (memory-safety!) requires just 12 cyles for coroutine
+context switch (since Rust compiles coroutines to regular function
+calls) using Lemire&#x2019;s algorithm using x86&#x2019;s <code>tzcnt</code>
+instruction on &#x201C;waker blocks&#x201D; for nanoscale scheduling.</li>
+<li>Multiplexes net &amp; storage I/O stacks by splitting the fast-path
+coroutine between polling DPDK devices &amp; SPDK completion queues in a
+round-robin manner for fair-share CPU cycle allocation.</li>
+</ul>
+<p>The authors compare Demikernel to 2 kernel-bypass applications -
+testpmd and perftest, and 3 kernel-bypass libraries - eRPC, Shenango,
+and Caladan. testpmd (L2 packet forwarded) &amp; perftest (measure RDMA
+NIC send and recv latency) are included with DPDK &amp; RDMA SDKs
+respectively.</p>
+<p>The authors show result with 4 different microscale kernel-bypass
+systems:</p>
+<ul>
+<li>Echo Application:
+<ul>
+<li>Demikernel&#x2019;s API semantics &amp; memory management let Demikernel&#x2019;s
+echo server implementation process messages without allocating or
+copying memory on the I/O processing path.</li>
+<li>Demikernel portably achieves competitive microsecond latencies,
+ns-scale I/O processing, run-to-completion &amp; zero-copy for
+networking &amp; storage.</li>
+</ul></li>
+<li>UDP Relay Server:
+<ul>
+<li>Demikernel makes kernel-bypass easier to use for programmers that
+are not kernel-bypass experts.</li>
+</ul></li>
+<li>Redis In-memory Distributed Cache:
+<ul>
+<li>Demikernel lets Redis correctly implement zero-copy I/O from its
+heap with no code changes.</li>
+<li>Demikernel provides existing microscale apps portable kernel-bypass
+network &amp; storage access with low overhead.</li>
+</ul></li>
+<li>TxnStore Distributed Transactional Storage:
+<ul>
+<li>Compared to custom solutions, Demikernel simplifies the coordination
+needed to support zero-copy I/O.</li>
+<li>Demikernel improves performance for higher-latency microscale
+datacenter apps compared to a naive custom RDMA implementation.</li>
+</ul></li>
+</ul>
+<h2 id="strengths">Strengths</h2>
+<ul>
+<li>Demikernel is a first step towards datapath OSes for microscale
+kernel-bypass apps. The work solves the big problems of portability,
+programmability, and performance in designing architectures for
+kernel-bypass systems.
+<ul>
+<li>Portability: This portability is across heterogeneous networking and
+storage devices, and the architecture can also accommodate future
+programmable devices.</li>
+<li>Programmability: The extend the POSIX API to optimize and simplify
+microscale kernel-bypass I/O, exposing a friendly API to app
+programmers.</li>
+<li>Performance: Demikernel datapath OSes have a per-I/O budget of less
+than 1 microsecond for I/O processing &amp; other OS services.</li>
+</ul></li>
+<li>Considerable engineering effort in implementing multiple libOSes
+with Linux as well as Windows as legacy OS for control path, and three
+libOS each for RDMA, DPDK &amp; SPDK devices. The authors also integrate
+network &amp; storage libOSes, and also developed a POSIX libOS to test
+and develop Demikernel apps without kernel-bypass hardware. This is a
+testament to the flexibility of the Demikernel architecture.</li>
+</ul>
+<h2 id="weaknesses">Weaknesses</h2>
+<p>This paper gives a design and implementation of a general-purpose
+datapath OS for microsecond-scale kernel-bypass apps. There is huge
+potential for future work, but this paper does not seem to be short of
+anything, and accomplishes what it set out to do.</p>
+<h2 id="future-work">Future Work</h2>
+<p>Each Demikernel OS feature represents a rich area for future
+work:</p>
+<ul>
+<li>Investigate what semantics a microscale storage stack might supply.
+Their current implementation, Cattree, maps PDPIX queue abstraction onto
+an abstract log for SPDK devices. It is a minimal storage stack with few
+features and works well for logging-based applications. But, we might
+need to layer more complex storage systems above it.</li>
+<li>Investigate efficient microscale memory management with memory
+allocators. As they mention, one can use more modern memory allocators
+like <code>mimalloc</code>. Also, since the datapath OS is awaare of the
+memory access patterns of the application, it is possible to do
+I/O-aware memory scheduling.</li>
+<li>Scaling the coroutine design to multiple cores is not trivial - the
+Demikernel libOSes will need to be carefully designed to avoid shared
+state across cores.</li>
+<li>Demikernel currently does not eliminate all zero-copy coordination
+&amp; we might need datapath OS features for more explicit memory
+ownership. Also, one can investigate an affordable way to provide write
+protection in addition to UAF for buffers in use.</li>
+</ul>
+  </div>
+
+  <script type="text/javascript" src="../js/mathjax_config.js"></script>
+	<script>
+		(function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+		(i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+		m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+		})(window,document,'script','https://www.google-analytics.com/analytics.js','ga');
+
+		ga('create', 'UA-90310997-2', 'auto');
+		ga('send', 'pageview');
+	</script>
+</body>
+</html>
