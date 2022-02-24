@@ -1,0 +1,319 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Papers</title>
+  <link href='../css/style.css' rel='stylesheet'>
+  <meta name=viewport content="width=device-width, initial-scale=1">
+</head>
+
+<body>
+  <div id=header>
+    <a href="../">Papers</a>
+  </div>
+  <div id="container">
+<h1 id="snap-a-microkernel-approach-to-host-networking">Snap: a
+Microkernel Approach to Host Networking</h1>
+<p><a href="https://dl.acm.org/doi/10.1145/3341301.3359657">Marty and De
+Kruijf, et al.&#xA0;2019. Snap: a Microkernel Approach to Host Networking. In
+ACM SIGOPS 27th Symposium on Operating Systems Principles (SOSP &#x2019;19),
+October 27&#x2013;30, 2019, Huntsville, ON, Canada. ACM, New York, NY, USA, 15
+pages. https://doi.org/ 10.1145/3341301.3359657</a></p>
+<p>Host networking needs are evolving due to:</p>
+<ul>
+<li>continuous capacity growth seeking new approaches to edge switching
+&amp; bandwidth management</li>
+<li>rise of cloud computing seeking rich virtualization features</li>
+<li>high-performance distributed systems seeking efficient &amp; low
+latency comms</li>
+</ul>
+<p>Reasons for moving network functions from kernel-space to
+user-space:</p>
+<ul>
+<li>developing kernel code is slow &amp; only few engineers could do
+it</li>
+<li>feature release through kernel module reloads covered a subset of
+functionality &amp; required disconnecting apps</li>
+<li>more common case required machine reboots which required draining
+the machine of running apps</li>
+<li>change of kernel-based stack took 1-2 months to deploy, whereas a
+new Snap release done on a weekly basis</li>
+<li>broad generality of Linux made optimization difficult &amp; defied
+vertical integration efforts, which were easily broken by upstream
+changes</li>
+</ul>
+<p>This paper presents a microkernel-inspired approach to host
+networking called Snap. Snap is a userspace networking system with
+flexible modules that implement various networking functions,
+including:</p>
+<ul>
+<li>edge packet switching</li>
+<li>virtualization for cloud platforms</li>
+<li>traffic shaping policy enforcement</li>
+<li>high-performance reliable messaging</li>
+<li>RDMA-like service</li>
+</ul>
+<p>Systems design principles for Snap:</p>
+<ul>
+<li>Snap implements host networking functions as an ordinary Linux
+userspace process (microkernel-inspired approach)
+<ul>
+<li>Retains centralized resource allocation &amp; management benefits of
+monolithic kernel</li>
+<li>High rate of feature development with transparent software
+upgrades</li>
+<li>Improves accounting &amp; isolation by accurately attributing both
+CPU &amp; memory consumed on behalf of apps to those apps using Linux
+kernel interfaces to charge CPU &amp; memory to app constainers</li>
+<li>Leverages user-space security tools like memory access sanitizers,
+fuzz testers</li>
+</ul></li>
+<li>Interoperable with existing kernel network functions &amp; app
+thread schedulers
+<ul>
+<li>Implements custom kernel packet injection driver for packet
+processing through both Snap &amp; Linux kernel networking stack</li>
+<li>Implements custom CPU scheduler without adopting new runtimes</li>
+</ul></li>
+<li>Encapsulates packet processing functions (data plane ops) into
+composable units called &#x201C;engines&#x201D;
+<ul>
+<li>stateful, single-threaded tasks scheduled &amp; run by a Snap engine
+scheduling runtime using lock-free communication over memory-mapped
+regions shared with the input or output</li>
+<li>enables modular CPU scheduling
+<ul>
+<li>engines are organized into groups sharing a common scheduling
+discipline</li>
+</ul></li>
+<li>incremental &amp; minimally-disruptive state transfer during
+upgrades</li>
+<li>examples: packet processing for network virtualization, pacing, rate
+limiting, stateful network transport like &#x201C;Pony Express&#x201D;</li>
+</ul></li>
+<li>Provides support for OSI L4 &amp; L5 functions through Pony Express
+transport
+<ul>
+<li>A Pony Express engine services incoming packets, interacts with
+apps, runs state machines to advance messaging &amp; one-sided ops, and
+generate outgoing packets</li>
+<li>Interface similar to RDMA capable &#x201C;smart&#x201D; NIC</li>
+<li>Transparently leverages stateless h/w offload capabilities in
+emerging NICs
+<ul>
+<li>includes Intel I/OAT DMA device to offload memory copy ops</li>
+<li>another example: end-to-end invariant CRC32 calculation over each
+packet</li>
+</ul></li>
+<li>Given zero-copy capability, NIC NUMA node locality &amp; locality
+within the transport layer are together more important than locality
+with the app thread, &amp; hence Pony Express runs transport processing
+in a thread separate from the app, and instead shares CPU with other
+engines &amp; other transport processing</li>
+<li>Ability to rapidly deploy new versions of Pony Express significantly
+aided development &amp; tuning of congestion control</li>
+<li>Ability to easily update &amp; change wire protocols</li>
+<li>Just-in-time generation of packets based on availability of NIC
+transmit descriptor slots ensures no per-packet queueing in the
+engine</li>
+<li>One-sided ops don&#x2019;t involve app code on the remote destination &amp;
+executes-to-completion within Pony Express engine
+<ul>
+<li>Supports rich operations such as &#x201C;indirect read&#x201D; to determine actual
+memory target to access from local app-filled indirection tables, and
+&#x201C;scan &amp; read&#x201D; - naive RDMA benefits disappear in these cases</li>
+</ul></li>
+<li>Provides mechanism to create message streams to avoid HoL
+blocking</li>
+<li>Flow control is mix of receiver-driven buffer posting as well as a
+shared buffer pool managed using credits
+<ul>
+<li>Flow control for one-sided ops rely on congestion control &amp; CPU
+scheduling mechanisms rather than higher-level mechanisms</li>
+</ul></li>
+</ul></li>
+<li>Highly tuned Snap &amp; Pony Express transport for performance to
+minimize I/O overhead
+<ul>
+<li>3x better transport processing efficiency than baseline Linux</li>
+<li>Supporting RDMA-like functionality at 5M IOPS/core</li>
+</ul></li>
+<li>Transparent upgrades
+<ul>
+<li>Gives ability to release new Snap versions without disrupting
+running apps</li>
+<li>During upgrades, running version serializes all state to an
+intermediate format stored in memory shared with new versions, migrating
+engines one at a time, each in its entirety</li>
+<li>Two-phase migration technique: brownout phase to perform preparatory
+background transfer &amp; blackout phase when network stack is
+unavailable</li>
+<li>Targetted blackout period is 200 ms or less</li>
+</ul></li>
+<li>Customizable emphasis between scheduling latency, performance
+isolation &amp; CPU efficiency of engines. Snap supports three broad
+categories of scheduling modes for engine groups:
+<ul>
+<li>Dedicating cores
+<ul>
+<li>engines are pinned to dedicated hyperthreads on which no other work
+can run</li>
+<li>doesn&#x2019;t allow CPU utilization to scale in proportion to load</li>
+<li>minimizes latency via spin polling</li>
+<li>static provisioning can strain system under load or
+overprovision</li>
+</ul></li>
+<li>Spreading engines
+<ul>
+<li>scales CPU consumption in proportion to load to minimize scheduling
+tail latency</li>
+<li>binds each engine to a unique thread that schedules when active
+&amp; blocks on interrupt notification (triggered from either NIC or
+app) when idle</li>
+<li>not subject to scheduling delays caused by multiplexing multiple
+engines onto a small number of cores</li>
+<li>leverages MicroQuanta, an internal real-time kernel scheduling
+class, engines bypass default Linux CFS kernel scheduler &amp; can
+quickly be scheduled to an available core upon interrupt delivery
+<ul>
+<li>a MicroQuanta thread runs for a configurable <em>runtime</em> out of
+every <em>period</em> time units, with remaining CPU time available to
+other CFS-scheduled tasks</li>
+</ul></li>
+<li>interrupts have system-level interference effects like being
+scheduled to a core in a low-power sleep state or in midst of running
+non-preemptible kernel code</li>
+</ul></li>
+<li>Compacting engines
+<ul>
+<li>collapses work onto as few cores as possible combining scaling
+advantages of interrupt-driven executing with cache-efficiency of
+dedicating cores</li>
+<li>but relies on periodic polling of engine queueing delays to detect
+load imbalance instead of instantaneous interrupt signals</li>
+<li>latency delay from polling engines plus the delay for statistical
+confidence in queueing estimation plus the delay in handing off engine
+to another core can be higher than latency of interrupt signaling</li>
+</ul></li>
+</ul></li>
+</ul>
+<p>The paper shows the following results:</p>
+<ul>
+<li>Performance measurement between a pair of machines connected to same
+ToR switch, machines with Intel Skylake processor &amp; 100Gbps
+NICs</li>
+<li>Baseline, single-stream throughput of TCP is 22Gbps with 1.2 cores/s
+utilization, &amp; Snap/Pony delivers 38Gbps using 1.05 cores/s</li>
+<li>With 5000B MTU, Snap/Pony single-core throughput increases to over
+67Gbps, &amp; enabling I/OAT receive copy offload (with zero-copy tx)
+increases to over 80Gbps</li>
+<li>Average RTT latency with TCP is 23 microsecs, &amp; Snap/Pony
+delivers 18 microsecs. Configuration with spin-poll reduces Snap/Pony&#x2019;s
+RTT latency to less than 10 microsecs and busy-polling sockets in Linux
+reduces latency to 18 microsecs</li>
+<li>Both Snap engine schedulers (&#x201C;spreading engines&#x201D; and &#x201C;compacting
+engines&#x201D;) succeed in scaling CPU consumption in proportion to load &amp;
+shows sub-linear increase in CPU consumption due to batching
+efficiencies. Snap is 3x more efficient than TCP at high offered loads
+due to:
+<ul>
+<li>copy reduction</li>
+<li>avoiding fine-grained synchronization</li>
+<li>5000B vs 4096B MTU difference between Snap/Pony &amp; TCP</li>
+<li>hotter instruction &amp; data caches in case of the compacting
+scheduler</li>
+</ul></li>
+<li>While Snap compacting scheduler offers the best CPU efficiency, the
+spreading scheduler has the best tail latency</li>
+<li>Spreading scheduler relies on interrupts to wake on idleness, which
+is prone to system-level latency contributors - in these cases
+compacting engines provide best latency
+<ul>
+<li>NIC generated interrupt might target a core in deep power-saving
+C-state</li>
+<li>Production machines run complex antagonists that can affect
+schedulability of even a MicroQuanta thread</li>
+</ul></li>
+<li>Conventional RPC stacks written on standard TCP sockets (gRPC) see
+less than 100,000 IOPS/core, but Snap/Pony can provide up to 5M
+IOPS/core with custom batched indirect read ops</li>
+<li>Transparent upgrades with median blackout of 250ms</li>
+</ul>
+<h2 id="strengths">Strengths</h2>
+<ul>
+<li>This paper presents the design &amp; architecture of Snap, a
+widely-deployed, microkernel-inspired system for host networking. They
+also describe a communication stack based on this microkernel approach
+&amp; transparent upgrade abilities without draining apps from running
+machines. Snap has been running in production for 3 years (at the time
+of the paper) supporting communication needs of several critical
+systems. This shows that the design principles that they followed were
+successful &amp; battle-hardened for Google-scale needs. They had
+already experimented with various in-application transport designs &amp;
+found the drawbacks exceed the strengths:
+<ul>
+<li>They prioritize fast release schedules of the network stack which
+required them to decouple it from apps &amp; the kernel for the
+transparent upgrades.</li>
+<li>Most of the in-app transports required a spin-polling transport
+thread with a provisioned core in every app to ameliorate scheduling
+unpredictabilities. But this is impractical because it is common to run
+dozens of apps on a single machine.</li>
+</ul></li>
+<li>They design three scheduling disciplines which can be customized
+depending on the engine &amp; it&#x2019;s required emphasis between CPU
+efficiency &amp; latency: dedicating cores, spreading engines &amp;
+compacting engines. The abstraction of engine is helpful for both the
+purpose of scheduling (through engine groups) as well as for supporting
+transparent upgrades. This is a strength of the Snap design.</li>
+</ul>
+<h2 id="weaknesses">Weaknesses</h2>
+<ul>
+<li>Much of the Snap scheduling mechanism relies on their
+internally-developed kernel scheduling class called MicroQuanta which
+provides a flexible way to share cores between latency-sensitive Snap
+engine tasks &amp; other tasks, and also an internally-developed driver
+for efficiently moving packets between Snap and the kernel. Without any
+access into such internal tooling, one can only speculate their
+functionality &amp; take their word for it. This makes the knowledge
+accessible to the community at a very high-level without deep-level
+understanding.</li>
+<li>The paper doesn&#x2019;t go into the details of how they implement memory
+management with Snap which is a significant challenge with non-kernel
+networking.</li>
+</ul>
+<h2 id="future-work">Future Work</h2>
+<ul>
+<li>Memory Mapping &amp; Management: Pony Express registers some
+app-shared memory with the NIC for zero-copy transmit but does so
+selectively and some apps take a copy from the app heap memory into
+bounce buffer memory shared &amp; registerd with Snap and vice versa.
+This means extra copies which can be avoided. Designing a custom system
+call to translate &amp; temporarily pin the memory which is cheaper than
+a memory copy can improve performance. In general, memory mapping &amp;
+management with non-kernel networking is a significant challenge.</li>
+<li>Dynamic CPU Scaling: Kernel TCP networking usage is very bursty in
+practice - sometimes, consuming upwards of a dozen cores over short
+bursts. Maybe there is a way to combine the CPU efficiency benefits of
+compacting engines and the better tail latency benefits at high Snap
+loads of spreading engines to achieve the best of both worlds. Scheduler
+design for host networking hosts is a challenge.</li>
+<li>Rebalancing Across Engines: One can consider fine-grained
+rebalancing flows across engines using mechanisms such as work
+stealing.</li>
+<li>Stateful Offloads: Currently they leverage stateless offloads, and
+do not mention about stateful h/w offloads in emerging h/w NICs.</li>
+</ul>
+  </div>
+
+  <script type="text/javascript" src="../js/mathjax_config.js"></script>
+	<script>
+		(function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+		(i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+		m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+		})(window,document,'script','https://www.google-analytics.com/analytics.js','ga');
+
+		ga('create', 'UA-90310997-2', 'auto');
+		ga('send', 'pageview');
+	</script>
+</body>
+</html>
