@@ -17,10 +17,12 @@ very high bandwidth and low latency and advanced features at surprisingly low
 price.
 
 An InfiniBand NIC used in the experiments is Mellanox Connect-IB which provides:
+
 - 2x56 Gbps InfiniBand (throughput)
 - ~2 micros RTT (latency)
 - supports RDMA (access remote memory without involving remote CPU)
-- $1300 (dollars per unit b/w << commonly used 10Gbps Ethernet cards)
+- $1300 (dollars per unit b/w much less than commonly used 10Gbps Ethernet
+	cards)
 
 A machine in an RDMA cluster consists of a multi-core CPU connected to a
 RDMA-capable NIC via the PCIe bus. When an RDMA read request comes from the
@@ -35,6 +37,7 @@ Problem with RDMA - Large Design Space
 One of the main problems with using RDMA is that it is difficult to achieve high
 end-to-end system performance. This is because performance depends on a lot of
 not-well-understood low-level factors such as the
+
 - CPU-NIC interaction
 - the NIC architecture
 - details of the PCIe bus
@@ -45,6 +48,7 @@ performance?
 The main reason why it is difficult to achieve high end-to-end system
 performance with RDMA is because it provides us a large number of options to
 work with:
+
 - multiple types of operations: one-sided, two-sided
 - multiple transports implemented by NIC:
 	- "reliable" guarantees in-order delivery of messages using acks
@@ -92,6 +96,7 @@ They also use the guidelines and optimizations for other systems such as a
 key-value store.
 
 RDMA supports a variety of different ops:
+
 - those that bypass the remote CPU, called one-sided RDMA. This includes RDMA
 	reads and writes and also atomic ops such as `fetch-and-add` & compare-and-swap.
 	We can do atomic ops on remote memory without involving the remote CPU.

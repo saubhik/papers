@@ -26,10 +26,15 @@ individual PCIe transactions &amp; NIC architecture.</p>
 provide very high bandwidth and low latency and advanced features at
 surprisingly low price.</p>
 <p>An InfiniBand NIC used in the experiments is Mellanox Connect-IB
-which provides: - 2x56 Gbps InfiniBand (throughput) - ~2 micros RTT
-(latency) - supports RDMA (access remote memory without involving remote
-CPU) - $1300 (dollars per unit b/w &lt;&lt; commonly used 10Gbps
-Ethernet cards)</p>
+which provides:</p>
+<ul>
+<li>2x56 Gbps InfiniBand (throughput)</li>
+<li>~2 micros RTT (latency)</li>
+<li>supports RDMA (access remote memory without involving remote
+CPU)</li>
+<li>$1300 (dollars per unit b/w much less than commonly used 10Gbps
+Ethernet cards)</li>
+</ul>
 <p>A machine in an RDMA cluster consists of a multi-core CPU connected
 to a RDMA-capable NIC via the PCIe bus. When an RDMA read request comes
 from the network at this NIC, the NIC reads the data from the CPU&#x2019;s
@@ -41,18 +46,36 @@ the network.</p>
 Large Design Space</h2>
 <p>One of the main problems with using RDMA is that it is difficult to
 achieve high end-to-end system performance. This is because performance
-depends on a lot of not-well-understood low-level factors such as the -
-CPU-NIC interaction - the NIC architecture - details of the PCIe bus</p>
+depends on a lot of not-well-understood low-level factors such as
+the</p>
+<ul>
+<li>CPU-NIC interaction</li>
+<li>the NIC architecture</li>
+<li>details of the PCIe bus</li>
+</ul>
 <p>What&#x2019;s the extent to which these low-level factors can affect
 end-to-end RDMA performance?</p>
 <p>The main reason why it is difficult to achieve high end-to-end system
 performance with RDMA is because it provides us a large number of
-options to work with: - multiple types of operations: one-sided,
-two-sided - multiple transports implemented by NIC: - &#x201C;reliable&#x201D;
-guarantees in-order delivery of messages using acks - &#x201C;unreliable&#x201D; with
-no acks - &#x201C;connected&#x201D; - &#x201C;datagram&#x201D; - multiple optimizations depending on
-app: - inlined - unsignaled - doorbell batching - WQE (Work Queue
-Element) shrinking - 0B Recvs</p>
+options to work with:</p>
+<ul>
+<li>multiple types of operations: one-sided, two-sided</li>
+<li>multiple transports implemented by NIC:
+<ul>
+<li>&#x201C;reliable&#x201D; guarantees in-order delivery of messages using acks</li>
+<li>&#x201C;unreliable&#x201D; with no acks</li>
+<li>&#x201C;connected&#x201D;</li>
+<li>&#x201C;datagram&#x201D;</li>
+</ul></li>
+<li>multiple optimizations depending on app:
+<ul>
+<li>inlined</li>
+<li>unsignaled</li>
+<li>doorbell batching</li>
+<li>WQE (Work Queue Element) shrinking</li>
+<li>0B Recvs</li>
+</ul></li>
+</ul>
 <p>Navigating this design space is difficult because: - determining
 which design space option is better requires understanding low-level
 factors (NIC architecture, PCIe bus) - some of the options seem like a
@@ -90,13 +113,16 @@ achieved by all clients - rate at which the server hands out these
 sequence numbers to clients.</p>
 <p>They also use the guidelines and optimizations for other systems such
 as a key-value store.</p>
-<p>RDMA supports a variety of different ops: - those that bypass the
-remote CPU, called one-sided RDMA. This includes RDMA reads and writes
-and also atomic ops such as <code>fetch-and-add</code> &amp;
-compare-and-swap. We can do atomic ops on remote memory without
-involving the remote CPU. - more traditional messaging ops, send &amp;
-recv ops. These are two-sided ops because they involve both the local
-&amp; the remote CPU.</p>
+<p>RDMA supports a variety of different ops:</p>
+<ul>
+<li>those that bypass the remote CPU, called one-sided RDMA. This
+includes RDMA reads and writes and also atomic ops such as
+<code>fetch-and-add</code> &amp; compare-and-swap. We can do atomic ops
+on remote memory without involving the remote CPU.</li>
+<li>more traditional messaging ops, send &amp; recv ops. These are
+two-sided ops because they involve both the local &amp; the remote
+CPU.</li>
+</ul>
 <p>With <code>fetch-and-add</code>, the sequencer server needs to expose
 a 64-bit counter over RDMA &amp; the clients need to issue fetch-and-add
 on the counter&#x2019;s address. It gives 2.2M ops/s which is not impressive.
