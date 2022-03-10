@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Papers</title>
+  <link href='../css/style.css' rel='stylesheet'>
+  <meta name=viewport content="width=device-width, initial-scale=1">
+</head>
+
+<body>
+  <div id=header>
+    <a href="../">Papers</a>
+  </div>
+  <div id="container">
+<h1
+id="prism-rethinking-the-rdma-interface-for-distributed-systems">PRISM:
+Rethinking the RDMA Interface for Distributed Systems</h1>
+<p>Matthew Burke, Sowmya Dharanipragada, Shannon Joyner, Adriana
+Szekeres, Jacob Nelson, Irene Zhang, and Dan R. K. Ports. 2021. PRISM:
+Rethinking the RDMA Interface for Distributed Systems. In ACM SIGOPS
+28th Symposium on Operating Systems Principles (SOSP &#x2019;21), October
+26&#x2013;29, 2021, Virtual Event, Germany. ACM, New York, NY, USA, 15 pages.
+https://doi.org/10.1145/3477132.3483587</p>
+<p>The past few years have seen a continual increase in network
+bandwidth and as signaled by Moore&#x2019;s law, CPU speeds have become to
+stagnate. It has become critical to reduce the involvement of the CPU
+when it comes to networking. RDMA achieves this by providing a standard
+accelerated interface to access remote memory directly through the
+network. Following these hardware trends, recent years have seen a
+plethora of distributed systems work that have been redesigned to
+utilize RDMA. These include key-value stores, distributed transactions,
+&amp; replicated storage systems.</p>
+<p>The RDMA interface has two kinds of ops:</p>
+<ul>
+<li>Two-sided ops: they have standard message passing semantics. Here
+the client machine&#x2019;s CPU invokes an RDMA send op &amp; the app running
+on the remote host invokes an RDMA receive op.</li>
+<li>One-sided ops: allow the client to read/write directly to a remote
+memory region with no additional CPU involvement on the remote
+host.</li>
+</ul>
+<p>They both come with their own tradeoffs:</p>
+<ul>
+<li>one-sided ops are faster &amp; more CPU efficient but their
+interface is restrictive allowing only reads &amp; writes to
+pre-registered memory buffers.</li>
+<li>two-sided ops offer richer semantics but are often slower and less
+CPU efficient.</li>
+</ul>
+<h2 id="motivating-example">Motivating Example</h2>
+<p>Many implementations of remote data structures use indirection. For
+example, hash table used in Pilaf (ATC&#x2019;13) and FaRM (NSDI&#x2019;14) key-value
+stores, two state-of-the-art RDMA systems, is a hash-based indexed data
+structure that maintains pointers to the actual value stored inside the
+key-value store. A <code>get</code> op could be implemented using RDMA
+as follows:</p>
+<ul>
+<li>we could issue the <code>get</code> as a standard two-sided RPC that
+is processed by the remote CPU and return the value to the client. This
+only takes 1 network roundtrip, but would consume CPU cycles on the
+remote host.</li>
+<li>we could issue 1 one-sided RDMA read to get the address of where the
+value is located, and another one-sided RDMA read to actually retrieve
+the value. There&#x2019;s no CPU involved, but we need at least 2 network
+roundtrips to process a <code>get</code>. The number of network
+roundtrips would increase in case of hash collisions.</li>
+</ul>
+<p>Additional network roundtrips can make one-sided implementations
+slower. What can we do about this?</p>
+<ul>
+<li>Forgo the use of one-sided ops completely by relying on RPCs. But
+this requires giving up CPU efficiencies that one-sided ops come with.
+This is done in FaSST (OSDI&#x2019;16), HERD (SIGCOMM&#x2019;14).</li>
+<li>Allow apps to install their own custom one-sided logic at the NIC.
+But this comes with significant deployment &amp; security challenges.
+Done in StRoM (EuroSys&#x2019;20), RMC (HotNets&#x2019;20).</li>
+<li>Standard Extensions to the RDMA Interface.</li>
+</ul>
+<h2
+id="prism-primitives-for-remote-interaction-with-system-memory">PRISM:
+Primitives for Remote Interaction with System Memory</h2>
+<p>This work considers standard extensions to the RDMA interface. How to
+design the API?</p>
+<ul>
+<li>The primitives must be generic.</li>
+<li>Primitives must express the application logic concisely and
+generalize to a large class of apps.</li>
+<li>Simple enough to be implemented on multiple platforms.</li>
+</ul>
+<p>They present PRISM: Primitives for Remote Interaction with System
+Memory based on:</p>
+<ul>
+<li>feasible to implement across different network stacks.</li>
+<li>implementable reusing existing RDMA mechanisms like retransmission
+&amp; access control.</li>
+</ul>
+<p>The PRISM API: list of proposed extensions to the traditional RDMA
+interface</p>
+<ul>
+<li>Indirect Read/Write/CAS: The target address specified by the
+operation can instead be interpreted as a pointer to the actual
+target.</li>
+<li>Enhanced Compare &amp; Swap: Extends RDMA CAS to provide support for
+arithmetic comparisons (&gt;,&lt;) during the compare phase.</li>
+<li>Allocation: Allows memory allocation on the data-plane from a
+pre-registered pool of memory.</li>
+<li>Operation Chaining: Allows for the execution of a chain of other
+PRISM primitives at the NIC.</li>
+</ul>
+<p>This is chosen based on their applicability to a large class of
+systems as well as their feasibility to implement across different
+platforms.</p>
+<h2 id="indirect-reads-with-prism">Indirect Reads with PRISM</h2>
+<p>Going back to the example, we can issue an indirect read PRISM call.
+The target address specified by the indirect read is interpreted as an
+address of a pointer. This pointer is then dereferenced to obtain the
+value that is returned to the client.</p>
+<ul>
+<li>only one network roundtrip</li>
+<li>no CPU involved in the process</li>
+</ul>
+<p>More complicated patterns of indirection can be implemented using
+operation chaining.</p>
+<p>Prototyped PRISM primitives on two different network stacks:</p>
+<ul>
+<li>Google Snap inspired Software RDMA prototype that partitions some
+CPU cores dedicated for packet processing.</li>
+<li>SmartNIC prototype using Mellanox BlueField-1 SmartNIC to execute
+the PRISM primitive.</li>
+<li>Also extensively discussed how the PRISM API could be added to a NIC
+ASIC while reusing underlying mechanisms that already exist in today&#x2019;s
+NICs.</li>
+</ul>
+<p>Three case studies to demonstrate the benefits of PRISM:</p>
+<ul>
+<li>PRISM-KV: a key-value store that implements both read &amp; write
+ops using the one-sided PRISM API.</li>
+<li>PRISM-TX: a transactional storage system that implements a
+timestamp-based optimistic concurrency control protocol using PRISM&#x2019;s
+primitives.</li>
+<li>PRISM-RS: a replicated storage system that implements the ABD quorum
+replication protocol.</li>
+</ul>
+<p>Each of these apps are widely used in practice. The proposed
+extensions allows us to efficiently implement all of these apps entirely
+in terms of one-sided PRISM primitives.</p>
+<p>Two kinds of benefits to using PRISM:</p>
+<ul>
+<li>Ops can take fewer network roundtrips with PRISM
+<ul>
+<li><code>Get()</code> in Pilaf, a KV-Store.</li>
+<li><code>TxRead()</code> in FaRM, a Transactional Storage System.</li>
+<li><code>ReadPhase()</code> in ABD, a Replicated Block Store.</li>
+</ul></li>
+<li>Ops that previously used traditional RPCs can be implemented as
+one-sided PRISM ops.
+<ul>
+<li><code>Put()</code> in Pilaf</li>
+<li><code>TxCommit()</code> in FaRM</li>
+<li><code>WritePhase()</code> in ABD</li>
+</ul></li>
+</ul>
+<h2 id="transaction-processing-with-prism---prism-tx">Transaction
+Processing with PRISM - PRISM-TX</h2>
+<p>FaRM is a state-of-the-art transaction processing sytem over RDMA. We
+consider a storage system where data is partitioned among multiple
+servers and clients group their ops into transactions. During the
+execution phase, they either read or write data from different servers.
+Reads use one-sided RDMA and writes are buffered locally in the
+execution phase. After all the operations finish executing, the
+transaction enters the commit phase. FaRM uses a variant of the
+two-phase commit protocol:</p>
+<ul>
+<li>Lock: the first phase is obtain locks for the write set.</li>
+<li>Validate: if the lock phase succeeds, we validate the read set to
+ensure that the objects that have been read haven&#x2019;t changed since the
+execution phase.</li>
+<li>Update &amp; Unlock: if the first two phases are successful, updates
+take effect &amp; all locks are released.</li>
+</ul>
+<p>In FaRM, the Update phase &amp; Lock phase have to use RPCs but the
+read set can be validated using one-sided RDMA reads.</p>
+<p>Can we build something better than FaRM?</p>
+<p>The execution phase of FaRM needs no further improvement since all
+communication that occurs between client &amp; servers here uses only
+one-sided ops. There is scope for improvement in the commit phase. We
+can replace the RPCs in the Lock &amp; Update phases with the PRISM API.
+But we need to make some modifications first.</p>
+<ul>
+<li>In FaRM, data is stored in a hash table that&#x2019;s accessible via RDMA
+&amp; each object is associated with a version number &amp; a lock. This
+layout wasn&#x2019;t designed to allow non-local changes to the version
+numbers. In order to be able to prepare and commit transactions with no
+CPU involvement, these have to be accessible to clients via RDMA. So, we
+couple the version number with other metadata in the hash table&#x2019;s index
+so that they are available to the client.</li>
+<li>Version numbers must be client-generated since the ops are entirely
+one-sided. For this purpose, we use timestamps generated by
+loosely-synchronized clocks. For each object, we store timestamp of the
+latest reads, writes &amp; commits that occurred to that object,
+followed by a pointer to it&#x2019;s current value.</li>
+</ul>
+<p>With these changes, all the OCC checks in the commit phase can use
+PRISM&#x2019;s Enhanced CAS primitives with no additional CPU involvement.</p>
+<ul>
+<li>At the beginning of the commit phase a timestamp is chosen such that
+it is larger than all the timestamps recorded in the read set during the
+execution phase.</li>
+<li>Locking for the write set is done by issuing an Enhanced CAS op on
+the write timestamp. If this PRISM Enhanced CAS succeeds, it is
+equivalent to obtaining a lock on this key &amp; prevent any concurrent
+readers or writers with a lower timestamp from succeeding.</li>
+<li>In the validation phase, we validate the read set by ensuring that
+the write timestamp hasn&#x2019;t changed. This ensures that there are no
+concurrent writers with the intent to write and commit. Then, we update
+the read timestamp. This ensures that no other concurrent transaction
+with a lower timestamp that reads or writes to this object after this
+point can commit.</li>
+<li>If all the r/w validation checks succeed, in the update phase, we
+install the write by using a chain of PRISM&#x2019;s Allocate &amp; Indirect
+Write primitives.</li>
+</ul>
+<p>The primitives enable a new class of one-sided OCC mechanisms.</p>
+<p>They compared PRISM-TX with their implementation of the FaRM protocol
+using both hardware &amp; software RDMA implementations for FaRM.
+PRISM-TX outperforms FaRM in both throughput and latency with a lower
+message complexity enabled by PRISM&#x2019;s primitives, about 5 micros faster
+than FaRM, &amp; reached about a 1M more txns/s before saturating the
+network.</p>
+<p>PRISM significantly expands the design space for RDMA-based
+applications by offering a middle ground between the restrictive RDMA
+R/W interface and the full-generality of RPC communication.</p>
+<h2 id="strengths">Strengths</h2>
+<ul>
+<li>This paper presents an extended API for access to remote memory.
+PRISM expands the design space for network-accelerated apps, making it
+possible to build new types of apps with minimal server-side CPU
+involvement, demonstrated by their key-value store, replicated storage,
+and distributed transaction apps.</li>
+<li>Coming up with design of an RDMA interface that satisfies the need
+of RDMA-based applications requires understanding the network access
+patterns of different apps &amp; in-depth understanding of current RDMA
+capabilities to extend them for maximal expressibility without requiring
+complexity and losing scalability (on different current &amp; future
+platforms).</li>
+</ul>
+<h2 id="weaknesses">Weaknesses</h2>
+<ul>
+<li>Not a particular weakness, but extending or proposing a new API
+interface for a powerful technology such as the RDMA to be supported in
+commercially-available hardware NICs would require testing a prototype&#x2019;s
+performance on a larger number of applications to convince the NIC
+manufacturers. The paper demonstrates that three sophisticated
+applications - key-value stores, replicated block storage, and
+distributed transactions - can be implemented entirely using the PRISM
+interface &amp; achieve latency and throughput benefits. However, these
+applications might not be representative of the overall class of
+RDMA-based applications. There is also a huge software development
+overhead of porting current applications to a new interface.</li>
+</ul>
+<h2 id="future-work">Future Work</h2>
+<ul>
+<li>Implementing the PRISM API in a RDMA-capable hardware NIC to prove
+their statement that their proposal reuses existing microarchitectural
+mechanisms.</li>
+<li>Investigating mechanisms for memory allocation &amp; management
+primitives for RDMA NICs. Management of client-allocated memory is
+challenging, with specific memory management policies left to the
+discretion of the client application.</li>
+<li>Explore other communication patterns in apps or how apps can benefit
+from alternative patterns. For example HyperLoop implements a different
+form of chaining - with a specially crafted RDMA request, a sender can
+cause a receiver to initiate a RDMA request to a third machine.</li>
+</ul>
+  </div>
+
+  <script type="text/javascript" src="../js/mathjax_config.js"></script>
+	<script>
+		(function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+		(i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+		m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+		})(window,document,'script','https://www.google-analytics.com/analytics.js','ga');
+
+		ga('create', 'UA-90310997-2', 'auto');
+		ga('send', 'pageview');
+	</script>
+</body>
+</html>
