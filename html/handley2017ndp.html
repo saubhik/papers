@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Papers</title>
+  <link href='../css/style.css' rel='stylesheet'>
+  <meta name=viewport content="width=device-width, initial-scale=1">
+</head>
+
+<body>
+  <div id=header>
+    <a href="../">Papers</a>
+  </div>
+  <div id="container">
+<h1
+id="re-architecting-datacenter-networks-and-stacks-for-low-latency-and-high-performance">Re-architecting
+datacenter networks and stacks for low latency and high performance</h1>
+<p>The goal of designing datacenter network is latency.</p>
+<ul>
+<li>Predictable low-latency, request-response behavior.
+<ul>
+<li>Zero-RTT setup.</li>
+<li>Extremely fast start of connections.</li>
+<li>Very short switch queues.</li>
+<li>Graceful incast behavior, minimal collateral damage for the
+flows.</li>
+</ul></li>
+<li>Receiver prioritization
+<ul>
+<li>Receiver knows which flows are most important at this instant.</li>
+</ul></li>
+<li>Predictable high throughput.
+<ul>
+<li>Per-packet load balancing.</li>
+</ul></li>
+</ul>
+<p>These goals interact with each other very badly. How close can we get
+to achieving them all simultaneously.</p>
+<p>Data sender: For minimal latency, start sending at line rate (blast
+without even a connection-setup handshake). No prior handshake: zero RTT
+setup. What could go wrong?</p>
+<p>Modern datacenters have some variant of Clos topology. A Clos
+topology provides enough bandwidth (capacity) for everyone to send at
+line rate. The problem is not lack of capacity. The problem is comes out
+of how do route the flows. With per-flow ECMP, then due to flow
+collisions which cause lots of loss, it&#x2019;s hard to use all the
+capacity.</p>
+<p>Solution: If every data sender starts at line rate and sprays packets
+equally across all paths to destination, then you are not going to have
+flow collisions and you can use the full capacity of the network core.
+The downside is this requires lots of reordering which makes it a burden
+for transport protocol.</p>
+<p>The other problem is if all the flows are sending to the same
+destination, then we can have incast near the receiver.</p>
+<p>At 10Gbps it takes 7.2us to serialize a 9KB packet. If there is no
+queueing, then latency is dominated by serialization. A small control
+packet (like an ACK) can traverse the whole network in &lt; 7.2us.</p>
+<p>Question: What should a switch do when the outgoing link is
+overloaded (like with incast)?</p>
+<ul>
+<li>Loss: is bad but retransmission is cheap but per-packet multipath
+makes it difficult to tell if loss has occurred. This causes delay.</li>
+<li>ECN: leads to less loss. Need large queues to reduce loss with
+incast. This causes delay.</li>
+<li>Lossless Ethernet: no loss. But builds large queues. PFC delays
+other unrelated flows. This leads to delay &amp; collateral damage.</li>
+</ul>
+<p>Packet Trimming is a middle ground: When a queue fills, trim off the
+payload and forward just the header. No metadata loss. Receiver knows
+exactly what was sent, even with reordering. (Lossless metadata but data
+loss). To keep the latency low, data packet queue of only 8 packets is
+enough. When the data queue overflows, the payload is trimmed (dropped)
+from the arriving packets, and forward the header in a priority queue
+(priority forwarded). This allows the receiver to find out as soon as
+possible that the data packet didn&#x2019;t make it. We also priority forward
+ACKs, and other control packets. This lets us do fast
+retransmissions.</p>
+<p>Let&#x2019;s send an incast to the destination. A queue starts building at
+the ToR switch. A packet gets trimmed and receiver requests
+retransmission, which gets priority forwarded. And then retransmission
+happens. Retransmission arrives before queue has completely drained.</p>
+<p>So, we just start, spray and trim.</p>
+<ul>
+<li>no prior handshake (0-RTT setup)</li>
+<li>send first RTT of data at line rate</li>
+<li>per-packet multipath load balancing</li>
+<li>packet trimming + prioritization + fast RTX</li>
+</ul>
+<p>This gives us:</p>
+<ul>
+<li>fastest possible startup</li>
+<li>no traffic concentration in core</li>
+<li>low latency, high throughput for incast</li>
+</ul>
+<p>But this also means:</p>
+<ul>
+<li>persistent high-rate flow collision near the receiver</li>
+<li>lots of trimming</li>
+<li>collateral damage to nearby flows</li>
+</ul>
+<p>We can solve this by decoupling the ack clock. We can separate the
+acking from the clocking:</p>
+<ul>
+<li>whenever a data packet arrives, ack or nack it immediately.
+<ul>
+<li>control packets get priority going through our network.</li>
+<li>sender knows what happened to a packet within 400us.</li>
+</ul></li>
+<li>clock all senders from receiver with PULL packets.</li>
+</ul>
+<p>When an incast starts at an NDP receiver, for every incoming packet
+or header, we add a pull packet to the pull queue. When the receiver&#x2019;s
+link is overloaded, headers start arriving and a pull queue builds. Pull
+packets are sent at the rate we want the incoming packets to arrive. The
+receiver gets control of the incoming traffic. After the first RTT,
+packets arrive at line rate. If the receiver wants, the receiver can
+also prioritize traffic from one sender over another. The receiver is
+controlling its own incoming traffic flow.</p>
+<p>The sender sends at line rate for the first RTT. And then it stops.
+After that receiver controls transmission by sending pulls. Pull packets
+from the receiver will clock out data. Pulls trigger retransmissions or
+sending of new data.</p>
+<p>The senders send at line rate for the first RTT. The small queue
+fills. Packets are trimmed. After the first RTT, packets are pulled, no
+more trimming occurs.</p>
+<p>So NDP is start, spray, trim, pull. This gives us:</p>
+<ul>
+<li>very quick setup (no prior handshake - zero-RTT setup)</li>
+<li>send 1st RTT of data at line rate</li>
+<li>per-packet multipath load balancing</li>
+<li>packet trimming + prioritization + fast RTX</li>
+<li>after 1st RTT, receiver pulls at its own rate</li>
+<li>receiver can choose which senders to pull first</li>
+</ul>
+<p>The authors implemented NDP in:</p>
+<ul>
+<li><code>htsim</code> packet-level simulation</li>
+<li>linux end-systems using DPDK</li>
+<li>custom linux switch using DPDK</li>
+<li>hardware switch using NetFPGA SUME</li>
+<li>P4 reference switch</li>
+</ul>
+<p>Evaluations:</p>
+<ul>
+<li>NDP has low flow completion times, even in the presence of heavy
+background traffic. They managed to keep switch queues really short even
+when the network is running at max capacity.</li>
+<li>Linux/NetFPGA implementation has near-optimal incast behavior. NDP
+achieves near-optimal large incast completion times.</li>
+<li>All the new protocols like MPTCP, DCTCP, DCQCN and NDP can do
+incast. MPTCP requires 200 packet output buffers, DCTCP requires 200,
+DCQCN requires 10000 packet shared buffers and NDP requires just 8
+packet output buffers.</li>
+</ul>
+<p>Incast is not hard if we don&#x2019;t care what happens to the neighbors.
+Suppose we have one long-lived flow going to node A and 64 more incast
+flows to node B on same switch as A but different switch port. With
+DCTCP when the incast flows arrive, the neighboring long flow dies and
+it takes a while to recover. With loss-less Ethernet, it&#x2019;s lot better
+but still the long flows suffer from bad collateral damage and this is
+because there is so much incoming traffic that they get paused up to the
+next switch up in the topology and that pauses the long flow as well as
+the short flows. NDP causes minimal collateral damage to neighboring
+flows. There is a little tiny 1 RTT glitch in the long flow, and in the
+very next RTT, it is back to full rate again.</p>
+<p>Receiver pulling allows the receiver to prioritize flows it cares
+about.</p>
+<p>NDP also works well with:</p>
+<ul>
+<li>simultaneous incast and outcast.</li>
+<li>heterogeneous packet sizes, flow patterns.</li>
+<li>overcommitted or overloaded topologies.</li>
+<li>&#x201C;failed&#x201D; links, including linkspeed differences.</li>
+<li>virtual machines (with hypervisor support).</li>
+</ul>
+<p>NDP does not work well:</p>
+<ul>
+<li>unequal length multipath, such as BCube. (doesn&#x2019;t make sense to
+spray equally among all paths)
+<ul>
+<li>can be very unfair without per-path rate control.</li>
+</ul></li>
+<li>public internet.</li>
+</ul>
+  </div>
+
+  <script type="text/javascript" src="../js/mathjax_config.js"></script>
+	<script>
+		(function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+		(i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+		m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+		})(window,document,'script','https://www.google-analytics.com/analytics.js','ga');
+
+		ga('create', 'UA-90310997-2', 'auto');
+		ga('send', 'pageview');
+	</script>
+</body>
+</html>
