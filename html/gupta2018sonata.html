@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Papers</title>
+  <link href='../css/style.css' rel='stylesheet'>
+  <meta name=viewport content="width=device-width, initial-scale=1">
+</head>
+
+<body>
+  <div id=header>
+    <a href="../">Papers</a>
+  </div>
+  <div id="container">
+<h1 id="sonata-query-driven-streaming-network-telemetry">Sonata:
+Query-Driven Streaming Network Telemetry</h1>
+<p>Arpit Gupta, Rob Harrison, Marco Canini, Nick Feamster, Jennifer
+Rexford, and Walter Willinger. 2018. Sonata: query-driven streaming
+network telemetry. In Proceedings of the 2018 Conference of the ACM
+Special Interest Group on Data Communication (SIGCOMM &#x2019;18). Association
+for Computing Machinery, New York, NY, USA, 357&#x2013;371.
+DOI:https://doi.org/10.1145/3230543.3230555</p>
+<p>Sonata is a query-driven network telemetry system that is both
+flexible and scalable. The onus of making the net work is on network
+operators. However, in recent years with the proliferation of internet
+connected devices and applications, the complexity of network management
+has increased significantly. To keep the networks running, network
+operators have to handle various events such as outages, congestion and
+cyberattacks. To handle all these events, the first thing is to detect
+these network events in real time. There is a need to perform network
+monitoring.</p>
+<p>To understand the requirements of a network monitoring system, lets&#x2019;
+consider a simple example. We have an attacker which sends spoof DNS
+request messages to open resolvers and the response to these requests
+get reflected to the victims. As the number of responses increases, the
+victims get overwhelmed. If I&#x2019;m a network operator and if I want to
+figure out if a host in my network is a victim of this attack or not, I
+need to find out if there are hosts that receive DNS responses from many
+distinct sources. In this task, the network operator is trying to
+extract an aggregate metric from a subset of the traffic. There are many
+ways in which we can define what subset of traffic we are interested in
+&amp; what kind of metrics we want to extract.</p>
+<p>Traffic: address, protocol, payload, device, location, &#x2026; Metrics:
+jitter, distinct hosts, volume, delay, loss, &#x2026;</p>
+<p>While designing network monitoring systems, it is important that we
+make sure that they are as flexible as possible: performance diagnosis,
+malware detection, fault localization, DDoS detection.</p>
+<p>The amount of storage and compute resources available for these
+network monitoring systems is limited. This creates a gap between
+desired flexibility and scalability. Sonata tries to bridge this gap.
+Sonata gives the abstractions that make it possible for network
+operators to express wide range of network monitoring tasks and the
+algorithms that make the best use of limited storage and compute
+resources and the system that glues the high-level abstraction with the
+low-level algorithms.</p>
+<p>Building Sonata is challenging:</p>
+<ul>
+<li>Programming abstractions: How to let network operators express
+queries for a wide-range of monitoring tasks?</li>
+<li>Scalability: How to execute multiple queries for high-volume traffic
+in real time?</li>
+</ul>
+<h2 id="programming-abstractions">Programming Abstractions</h2>
+<p>A packet in a network carries a lot of information in header &amp;
+payload: metadata (traversed path, queue size, number of bytes) + header
+(source/dest address, protocol, parts) + payload. With recent
+developments in programmable switches, a packet also carries lot of meta
+information which captures network state information. Unlike many
+existing network monitoring systems that operate at much coarser level
+of granularity, Sonata operates at packet-level of granularity. It lets
+network operators treat packets as tuples: <code>Packet =
+(path,qsize,nbytes,sIP,dIP,proto,sPort,dPort,...,payload)</code>. This
+lets them express their monitoring tasks as Dataflow Queries.</p>
+<p>For example: Detecting DNS Reflection Attack is about identifying if
+DNS response messages from unique DNS servers to a single host exceeds a
+threshold (Th). We want to find <code>victimIPs</code>, and we will
+operate over a stream of packet tuples <code>pktStream</code>.</p>
+<pre><code>victimIPs = pktStream
+    .filter(p=&gt;p.udp.sport==53)      // DNS responses
+    .map(p=&gt;(p.dstIP,p.srcIP))
+    .distinct()                      // from unique DNS servers
+    .map((dstIP,srcIP)=&gt;(dstIP,1))
+    .reduce(keys=(dstIP,),sum)       // to a single host
+    .filter((dstIP,count)=&gt;count&gt;Th) // exceeds a threshold</code></pre>
+<p>This is helpful because we can express wide range of network
+monitoring tasks in fewer than 20 lines of code.</p>
+<h2 id="scalability">Scalability</h2>
+<p>What is the target we are going to use for compiling/executing these
+queries? In the past, all the network monitoring systems that offers
+this level of flexibility used CPU for query execution (SIGMOD&#x2019;03
+Gigascope, SIGCOMM&#x2019;17 NetQRE). We can extract and parse header and
+payload fields, apply any action, and memory available for stateful
+operators is O(Gb). The problem is that they process packets at O(us)
+which is very slow.</p>
+<p>One can argue that you can use state of art scalable stream processor
+(like Apache Spark) to horizontally scale the computation but the
+problem is that they cannot process packets at line rate still holds
+true, and you still need to capture packets from the data plane &amp;
+send to CPU for processing.</p>
+<p>An alternate solution is we can programmable switches, though these
+programmable switches can process packets at line rate, O(ns), but they
+offer limited flexibility (only match headers, and can only apply add,
+subtract, bit ops, with O(Mb) memory for stateful ops). Example: Univmon
+(SIGCOMM&#x2019;16), Marple (SIGCOMM&#x2019;17).</p>
+<p>We can use both switches and CPUs.</p>
+<p>PISA (RMT SIGCOMM&#x2019;13) Processing Model: Devices based on PISA, a
+protocol-independent switch architecture, have a programmable parser.
+This can extract user-defined packet formats and store the parsed value
+in a fixed-length packet header vector. A switch will have a pipeline
+with multiple stages - each stage will have multiple reconfigurable
+match-action tables composed of TCAMs, ALUs &amp; SRAM. At the end of
+the pipeline, there is a programmable deparser that will serialize the
+packet header vector back into a packet. This is not very different from
+Dataflow processing model which is inherent to stream processors.</p>
+<ul>
+<li>Dataflow &amp; Dataplane both have pipeline of processing units
+operating over structured data.</li>
+<li>PU in case of dataflow is operators (map, reduce, distinct), and in
+case of dataplane are match-action tables.</li>
+<li>Structured data for dataflow is tuples and for dataplane its
+packets.</li>
+</ul>
+<p>Packets can be represented as tuples. But how can we translate
+operators to match-action tables?</p>
+<p>Which dataflow operators can be compiled to match-action tables?</p>
+<p>Case for stateless operators: <code>filter(p)</code> is a stateless
+operator with predicate <code>p</code>. It receives a stream of elements
+as input and output a stream of elements satisfying predicate
+<code>p</code>. This operator can be simply translated by supplying this
+predicate <code>p</code> to the match field of the match-action
+table.</p>
+<p>Case for stateful operators: <code>reduce(f)</code> which applies a
+function <code>f</code>. It receives a stream of elements as input and
+returns a single output value which is the result of applying function
+<code>f</code> over all elements. Because it is stateful, it will
+require some memory. This memory can be implemented in the hardware
+switch as hash-indexed array. To compile this operator, we will require
+two match action tables: <code>.reduce(keys=(dstIP,),sum)</code> will
+compile to:</p>
+<pre><code>Match |  Action
+-------------------------
+ *    |  idx=hash(m.dstIP)
+ *    |  stateful[idx]+=1</code></pre>
+<p>For compiling a query, apply all these individual match-action tables
+in sequence.</p>
+<h2 id="query-partitioning">Query Partitioning</h2>
+<p>The amount of resources that are available over a switch are limited.
+Thus the system actually requires a &#x201C;Query Planner&#x201D; which is going to
+make decisions about which portions of this query should be executed on
+the switch and which portions should be executed on the CPU. After
+applying the processing on the switch, the remainder tuples will be sent
+to the CPU for further processing.</p>
+<p>A Query Planner needs to answer two basic questions for each
+decision:</p>
+<ul>
+<li>Resources: Whether the switch has sufficient resources to execute
+the partitioned query.</li>
+<li>Reduce Load: Whether the partition decision is reducing the
+workload: the number of tuples sent to the stream processor.</li>
+</ul>
+<p>We have to make partitioning decisions for all queries which will be
+sharing the dataplane resources.</p>
+<p>The query partitioning problem is modeled as an Integer Linear
+Program (ILP). The goal is to minimize the tuples sent to the stream
+processor. This is subject to dataplane constraints:</p>
+<ul>
+<li>size of the packet header vector (PHV)</li>
+<li>number of actions that can performed in each pipeline stage</li>
+<li>amount of persistent state for stateful operators available in each
+pipeline stage</li>
+<li>total number of stages</li>
+</ul>
+<p>We use representative packet traces to estimate what are the resource
+requirements for individual match-action tables and also the estimate of
+the number of tuples that will be sent to the stream processor.</p>
+<p>How effective is Query Partitioning?</p>
+<p>With 8 monitoring tasks and 100 Gbps workload, and we will compare
+the number of tuples sent to the stream processor. If we send everything
+to the CPU, the number of tuples is O(10^9). If we can execute stateful
+operators in the switch itself, then we should expect multiple orders of
+magnitude reduction in the tuples sent to the stream processors. But we
+observe only 1 order of magnitude reduction: O(10^8). This is because
+the amount of stateful memory required for executing stateful operators
+such as distinct and reduce was more than what was available in the
+switch, so the Query Planner was forced to execute all the stateful
+operators in the CPU rather than the switch.</p>
+<p>How can we reduce the memory footprint of stateful operators?</p>
+<p>Observations:</p>
+<ul>
+<li>Nature of monitoring tasks: the number of hosts which are a victim
+of a DNS reflection attack is a very small fraction. Most monitoring
+tasks are looking for needles in a haystack.</li>
+<li>Possible to reduce memory footprint with simple transformations to
+existing queries: For example if we only consider the first 8 bits
+before any op (<code>pktStream.map(dIP=&gt;dIP/8)....</code>), we are
+executing this query at a coarser refinement level and the stateful ops
+(<code>distinct</code> and <code>reduce</code>) will require lesser
+memory. Queries at coarser levels have smaller memory footprint.</li>
+<li>Possible to preserve query accuracy: If the fields used for the
+refinement have hierarchical structure, then we won&#x2019;t be missing the
+needles we are interested in: example <code>dIP</code> or
+<code>sIP</code>. Query accuracy is preserved if refined with
+hierarchical packet fields.</li>
+</ul>
+<p>They combined all these observations together to devise the scheme
+called <code>Iterative Query Refinement</code>. We first execute query
+at coarser level, and at the end of the first window interval, we will
+get the output which will have the query because of the choice of
+hierarchical packet fields. This will have have the needles we&#x2019;re
+interested in but also have some false positives. For new fresh set of
+packets that are coming in a new window interval, we&#x2019;ll apply the same
+query but at finer level. But this time we&#x2019;ll apply a filter operator
+which will make sure that it will only operate over subset of traffic
+that satisfied the query in the previous interval. We&#x2019;ll apply all the
+similar set of operators at finer refinement level. The effective memory
+footprint over these two intervals has reduced but the cost is that it
+is taking additional time for finding the needles that we were
+interested in. This approach is able to reduce the memory footprint for
+executing these queries at the cost of additional detection delay.</p>
+<p>How Query Planner makes this refinement decisions?</p>
+<p>The goal is still to minimize the tuples sent to the stream
+processor. It is given the set of queries and representative packet
+traces. In addition to standard decision making it was making for query
+partitioning, it needs to answer:</p>
+<ul>
+<li>Which packet field to use for iterative refinement? (needs to have
+hierarchical structure).</li>
+<li>What levels to use for iterative refinement?</li>
+<li>What&#x2019;s the partitioning plan for each refined query? Execution in
+the switch vs the CPU.</li>
+</ul>
+<p>They augmented partitioning ILP to compute both refinement &amp;
+partitioning plans.</p>
+<p>Sonata&#x2019;s Performance: Compared to the approach where we were sending
+everything to the CPU, when we were doing partitioning, we were just
+getting 1 order of magnitude improvement, but with partitioning as well
+as refinement, we are able to get 4 orders of magnitude reduction.</p>
+<h2 id="strengths">Strengths</h2>
+<ul>
+<li><p>The paper designed and implemented a system which is flexible,
+i.e.&#xA0;lets network operators express queries for a wide range of network
+monitoring tasks:</p>
+<ul>
+<li>dataflow queries over packet tuples</li>
+<li>fewer than 20 lines of code</li>
+</ul>
+<p>and scalable,i.e.&#xA0;makes best use of limited resources of programmable
+switches and the CPU:</p>
+<ul>
+<li>query refinement &amp; partitioning algorithms</li>
+<li>4 orders of magnitude workload reduction</li>
+</ul>
+<p>This work bridges the gap between expressivity &amp; scalability by
+combining the strengths of stream processors and programmable switches
+in a single telemetry system.</p></li>
+</ul>
+<h2 id="weaknesses">Weaknesses</h2>
+<ul>
+<li>We can consider partitioning the queries to the NICs. Even though
+Sonata is extensible - the architecture has data plane drivers written
+for Tofino switches or other P4 software switches, but the driver can be
+extended so that smart NICs can also be used. But this wasn&#x2019;t explored
+further because supporting stateful operators were not supported in the
+NICs. There isn&#x2019;t any mention of NICs in the paper.</li>
+</ul>
+<h2 id="future-work">Future Work</h2>
+<ul>
+<li>It would be interesting to carry the evaluation experiments in a
+real deployment instead of simulated PISA switches and also understand
+the availability of limited resources for monitoring and forwarding. The
+performance gains are bounded by the available switch resources.</li>
+<li>Being able to monitor network-wide events. Current implementation of
+Sonata is able to identify network events at a single location.</li>
+<li>Sonata is capable of handling traffic dynamics by looking at
+collisions and reacting to it. How can we make the system more adaptive
+by figuring out efficient ways in which we can identify whether traffic
+patterns have changed, and also come up with efficient reconfiguration
+techniques so that we can update the packet processing pipeline.</li>
+</ul>
+  </div>
+
+  <script type="text/javascript" src="../js/mathjax_config.js"></script>
+	<script>
+		(function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+		(i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+		m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+		})(window,document,'script','https://www.google-analytics.com/analytics.js','ga');
+
+		ga('create', 'UA-90310997-2', 'auto');
+		ga('send', 'pageview');
+	</script>
+</body>
+</html>
