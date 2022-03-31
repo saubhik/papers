@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Papers</title>
+  <link href='../css/style.css' rel='stylesheet'>
+  <meta name=viewport content="width=device-width, initial-scale=1">
+</head>
+
+<body>
+  <div id=header>
+    <a href="../">Papers</a>
+  </div>
+  <div id="container">
+<h1
+id="simon-a-simple-and-scalable-method-for-sensing-inference-and-measurement-in-dcns">SIMON:
+A Simple and Scalable Method for Sensing, Inference and Measurement in
+DCNs</h1>
+<p>Yilong Geng, Shiyu Liu, Zi Yin, Ashish Naik, Balaji Prabhakar, Mendel
+Rosenblum, and Amin Vahdat. 2019. SIMON: a simple and scalable method
+for sensing, inference and measurement in data center networks. In
+Proceedings of the 16th USENIX Conference on Networked Systems Design
+and Implementation (NSDI&#x2019;19). USENIX Association, USA, 549&#x2013;564.</p>
+<p>SIMON is about measuring accurate queue sizes in the network from the
+edge of the data center network.</p>
+<p>Network measurement is useful for:</p>
+<ul>
+<li>network health monitoring</li>
+<li>traffic engineering</li>
+<li>network capacity planning</li>
+<li>troubleshooting of performance problems, breakdowns &amp;
+failures</li>
+<li>detecting anomalies and security threats</li>
+</ul>
+<p>The main challenges are:</p>
+<ul>
+<li>accuracy: accurately observe &amp; measure events or phenomena of
+interest</li>
+<li>scalability: large networks, high line rates, large event
+frequency</li>
+<li>speed: perform accurate &amp; scalable measurement in near real-time
+as opposed to offline</li>
+</ul>
+<p>Most solutions seek to make effective trade-offs among these
+conflicting requirements.</p>
+<p>Two classes of network measurement methods:</p>
+<ul>
+<li>switch-based measurement:
+<ul>
+<li>syslog &amp; SNMP (polling switch port counters)</li>
+<li>Netflow &amp; sFlow (flow-level statistics)</li>
+<li>in-band network telemetry (INT, per-packet information)</li>
+<li>pros: widely available, can be accurate (especially INT)</li>
+<li>cons: require h/w support, hard to reassemble global view (requires
+vendor agreement), overhead of data transfer, storage &amp;
+processing</li>
+</ul></li>
+<li>edge-based measurements:
+<ul>
+<li>Trumpet, 007, PingMesh, and many others</li>
+<li>Pros: flexible since not tied to switches, resources on end-hosts
+are abundant</li>
+<li>Cons: obtains partial views (delay distributions, identifying lossy
+links etc.), not as accurate as switch-based</li>
+</ul></li>
+</ul>
+<p>SIMON falls in edge-based measurements:</p>
+<ul>
+<li>use data gathered entirely at the edge</li>
+<li>reconstruct near-exact queueing dynamics in the network</li>
+</ul>
+<p>They observed that queue sizes sampled at 1-ms sampling rate captures
+almost all fluctuations of the queue. The noise (jitter) is small
+relative the the queue sizes and hence reconstructing this (&amp; a
+per-flow decomposition of it) is much simpler &amp; scalable. They try
+to first reconstruct the overall queueing delays &amp; then break down
+the queueing delay into individual flows. They also try to get a link
+utilization breakdown to individual flows too.</p>
+<p>Some use cases of the 1-ms average queues:</p>
+<ul>
+<li>understand the traffic pattern of an application &amp; its impact on
+the network</li>
+<li>investigate network interference among multiple applications</li>
+<li>identify congested links &amp; culprit applications</li>
+<li>congestion control (control real congestion, not jitters)</li>
+</ul>
+<p>The 1 ms averaging operation is actually passing the queueing signal
+into a low pass filter with a cut-off frequency of 500 Hz. If we compute
+the power spectral density of the 1 us signal &amp; the 1 ms signal, for
+the 1 us signal, the majority of the power of the signal concentrates in
+the low frequency (&lt; 500 Hz) part, and the 1 ms average signal
+captures almost all the low-frequency part of the 1 us signal. The 1 ms
+signal preserves over 97.5% of the power of the 1 us signal. For 10G
+networks, if we increase the averaging interval, we start to quickly
+lose power &amp; if the averaging interval is smaller than 1 ms, we
+don&#x2019;t have much gain. For 1G &amp; 40G networks, the sweet spot
+averaging intervals are 10 ms, and 250 us respectively. So the ideal
+averaging interval is inversely proportional to the link speed of the
+network: with higher-speed links, the queues will vary faster &amp; we
+want to reconstruct the queues more frequently. This averaging interval
+is called the reconstruction interval.</p>
+<p>Support server A sends a packet to server B through the network, and
+the two servers collect the tx &amp; rx timestamps of the packet.
+Assuming clocks are synchronized, these two timestamps would tell us the
+one-way delay of the packet. Our goal is to breakdown the one-way delay
+into the individual hops in the network. Suppose q1, q2, &#x2026;, q5 are the 5
+queues passed by the packet in the network: <code>RX1 - TX1 = q1 + q2 +
+q3 + q4 + q5 + n1</code>, where <code>n1</code> is a noise term which
+models the variable switching delays in the switches as well as the
+propagation delays on the wires.</p>
+<p>So with this single packet, we have 1 equation for 5 variables. We
+can gather many packets &amp; write down all the equations and try to
+solve for the queues.</p>
+<p>The inputs to the algorithm are:</p>
+<ul>
+<li>5-tuples of packets, for inferring network paths</li>
+<li>Tx, Rx timestamps of packets</li>
+</ul>
+<p>From the 5-tuples, we can know the path taken by the packet, and from
+the timestamps we can know the one-way delay of the packet. We have:</p>
+<p>one way delay = sum of queueing delay over all hops + propagation
+delay</p>
+<p>If we combine all packets, we get a linear system: D = AQ + N, D is a
+vector of 1-way delays, A is a matrix specifying which packets pass
+through which queues, Q is a vector of queueing delays. In factory
+networks, this linear system is always undetermined - we don&#x2019;t have
+enough equations. Since congestion in network is sparse, the Q vector is
+sparse, and so we can use the Lasso estimator to estimate the Q.</p>
+<p>Their first attempt was to reconstruct the queueing delays using the
+data packets which are the packets generated by the apps. Sometimes the
+reconstruction matches the ground truth pretty well, however other
+times, the algorithm is attributing the data into the wrong queues. This
+is because with only data packets there&#x2019;s not enough equations (paths)
+compared to the variables (queues). Even though there&#x2019;s a large number
+of data packets, many of them are passing through the same path because
+packets from the same flow go through the same path. So the path
+coverage in the network is not enough.</p>
+<p>They introduce a probe mesh:</p>
+<ul>
+<li>each server randomly picks 10 &#x201C;probing buddies&#x201D;</li>
+<li>in each reconstruction interval, each server sends 1 probe to each
+of its buddies</li>
+<li>every probe is acked</li>
+<li>overhead is 0.1% of the line rate</li>
+</ul>
+<p>We can use a small number of packets to create a dense coverage of
+paths in the network.</p>
+<p>Their second attempt was to reconstruct with only probe timestamps.
+The reconstruction matches ground truths well and the average
+reconstruction error is 5.2 KB, which is 3-4 MTU-sized packets.</p>
+<p>Lasso solver is iterative, which means it takes time to solve the
+problem in a large network. They used a Neural Network to speed up the
+speed of the Lasso. Initially, we use Lasso to do the reconstruction, so
+as the probe timestamps come in, we feed the probe timestamps to both
+Lasso &amp; the neural network, and then we can use the output of Lasso
+recon result to train the NN. After we have trained the NN, when new
+probe timestamps come in, we can then use the NN output as a recon
+result. NN is much faster than Lasso since it can be sped up by GPUs. NN
+gives us 5k-10k times the speedup without losing much accuracy.</p>
+<p>We want to find:</p>
+<ul>
+<li>link utilizations</li>
+<li>whose packets are in the queues?</li>
+<li>whose packets are using the links?</li>
+</ul>
+<p>Now they use data packet timestamps too. Now we know the queueing
+delays for queues in the network. If we know the tx timestamp of a data
+packet, we can simulate this data packet and know where this packet is
+at any point of time. If we do this for every data packet, we have a
+full-on reconstruction of the queueing dynamics in the network. This is
+costly because it is a per-packet operation. In reality, we only need to
+use the byte counts per flow to do this reconstruction. Reconstruction
+is accurate to a couple of MTU sized packets. They also found that
+reconstruction of the link utilizations has RMSE within 1%.</p>
+<p>They have deployed and tested this algorithm in Google Jupiter 40G
+testbed with 20 racks and 3-layer network and also much larger network
+with 10G &amp; 40G links, access to 12 out of 100s of racks &amp; a
+5-layer network. At Stanford, they used a testbed with 1G links, 128
+servers and 2-layer network. They used NetFPGAs for verification, to get
+queueing delay ground truths from the network: the idea is that we use 1
+FPGA as two timestampers: a packet will first go to the FPGA, take a
+timestamp of it, then the packet will go into the switch and come out of
+the switch and go into the FPGA again for a second timestamp. Using the
+two timestamps, we can know the ground truth queueing delay. They used 2
+FPGA and got ground truths for 4 different queues in the testbed. They
+show that the Lasso recon matches the ground truth very well. In the
+other testbeds, they use a cross-validation scheme to verify that their
+algorithm is giving the correct results.</p>
+<h2 id="strengths">Strengths</h2>
+<ul>
+<li>Simon employed several techniques to simultaneously achieve precise
+reconstruction &amp; scalability. The work uses probe mesh, which has a
+very low bandwidth overhead (0.1% of bandwidth with 64B probes). Using
+probe packets, they reconstruct the queue length in a network &amp; then
+use data packets timestamps, they decompose the queues &amp; link
+utilizations on a per-flow basis. Finally, they verified the system
+using NetFPGAs and cross-validation.</li>
+<li>Current edge-based methods obtain only a partial view of the network
+state and some may require non-trivial assistance from switches. This is
+the first application of network tomography to gata centers and for
+obtaining a near-exact reconstruction.</li>
+<li>The work stressed on practicability alongside accuracy &amp; speed
+of Simon. They used a testbed with low-cost switches and 1G network.
+They also discuss pragmatic experience gained from these deployments.
+Simon makes minimal assumptions about the network.</li>
+</ul>
+<h2 id="future-work">Future Work</h2>
+<ul>
+<li>In the work they implemented the Lasso version of Simon for Linux.
+Hierarchical reconstruction &amp; neural networks are planned to be
+implemented for production environment in the future.</li>
+<li>One could investigate into schemes for path selection during probing
+(in the probe mesh) to efficiently cover the DCN&#x2019;s links more evenly or
+unevenly, depending on some objective, with an adequate number of probes
+passing through each link per unit time to enable a good reconstruction
+of the link.</li>
+</ul>
+  </div>
+
+  <script type="text/javascript" src="../js/mathjax_config.js"></script>
+	<script>
+		(function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+		(i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+		m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+		})(window,document,'script','https://www.google-analytics.com/analytics.js','ga');
+
+		ga('create', 'UA-90310997-2', 'auto');
+		ga('send', 'pageview');
+	</script>
+</body>
+</html>
