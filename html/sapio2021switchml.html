@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Papers</title>
+  <link href='../css/style.css' rel='stylesheet'>
+  <meta name=viewport content="width=device-width, initial-scale=1">
+</head>
+
+<body>
+  <div id=header>
+    <a href="../">Papers</a>
+  </div>
+  <div id="container">
+<h1
+id="scaling-distributed-machine-learning-with-in-network-aggregation">Scaling
+Distributed Machine Learning with In-Network Aggregation</h1>
+<p>Distributed ML training is increasingly a network-bound workload. The
+work considers data-parallel training, where the input data is
+partitioned across workers, focussing exclusively on widely-used
+distributed synchronous SGD. The challenge is that data-parallel SGD
+requires computing the sum of model updates across all workers after
+every iteration. Each model update has as many parameters as the model
+itself, and models are growing exponentially. Today, they exceed 32 GB.
+Performance bottleneck in distributed training is shifting from compute
+to communication due to:</p>
+<ul>
+<li>Advancements in GPUs and other compute accelerators. The pace of
+performance improvements in GPUs far exceeds the improvement in Ethernet
+speeds (network bandwidth).</li>
+<li>Ratio of communication to computation in the workloads has shifted.
+DNNs are becoming larger. This is application-dependent.</li>
+</ul>
+<p>Today&#x2019;s ML toolkits implement this communication phase in one of two
+ways:</p>
+<ul>
+<li>The parameter server approach: workers compute model updates and
+send them to PSs. PSs are dedicated machines which aggregate updates to
+compute &amp; distributed the new model parameters. The model is sharded
+over multiple PS nodes.</li>
+<li>The all-reduce approach: workers communicate over an overlay
+network. RAR, ring all-reduce, where each worker communicates to the
+next neighboring worker on the ring, is common because it is
+bandwidth-optimal.</li>
+</ul>
+<p>Even at 100 Gbps, DeepLight, LSTM, NCF, and BERT spend 17% of their
+batch time in communication. When GPUs become faster, network
+performance will be a serious issue event at 100 Gbps.</p>
+<p>The work proposes an alternative approach to model update exchange
+for ML workloads using in-network aggregation (INA). Workers send their
+model updates over the network where an aggregation primitive sums the
+updates and distributes only the resulting value.</p>
+<p>The fundamental advantage of INA over PS &amp; all-reduce is
+that:</p>
+<ul>
+<li>it achieves minimum possible latency and the minimum possible
+communication cost (data bytes each worker sends and receives).</li>
+<li>avoids eng-host processing required for aggregation &amp; hence
+provides sub-RTT latency</li>
+</ul>
+<p>Even though techniques like gradient compression can reduce the data
+volume of model updates, it is not necessarily superior to INA.</p>
+<ul>
+<li>The computational cost of compression and decompression is
+non-negligible &amp; in some cases, it outweighs the
+communication-reduction benefits.</li>
+<li>Higher levels of compression either requires more training
+iterations to converge, or hurts the accuracy of the resulting
+models.</li>
+</ul>
+<p>The proposed system, SwitchML, implements the aggregation primitive
+in a programmable dataplane switch. They solve the challenges of limited
+computation &amp; storage capabilities in switches. The system must also
+tolerate packet loss, since the DNN training jobs are long-running.</p>
+<p>SwitchML uses the following techniques:</p>
+<ul>
+<li><p>Combined switch-host architecture: Switch performs integer
+aggregation, while end-hosts manage reliability &amp; perform more
+complex computations.</p>
+<ul>
+<li>A switch provides a pool of <code>s</code> integer aggregators,
+addressable by index. Each slot in the pool aggregates a vector of
+<code>k</code> integers, which are delivered all at the same time in one
+update packet. The division op is done the end-host. A packet
+<code>p</code> carries a pool index (to identify the aggregator), and a
+vector of <code>k</code> integers to be aggregated. Upon rx, the switch
+aggregates <code>p.vector</code> into the slot <code>p.idx</code>. Once
+the slot has aggregated vectors from each worker, the switch then
+multicasts the result to each worker. The pool-based design:
+<ul>
+<li>addresses limited switch memory, by not storing entire model update
+in switch, instead aggregates in streaming fashion</li>
+<li>to maintain high forwarding rate, programmable switches parse only
+upto a certain amount of bytes. The model-update vector &amp; all other
+packet headers must fit in parsed portion.</li>
+</ul></li>
+<li>Worker controls which vector they send to which pool
+<code>idx</code> and since pool size <code>s</code> is limited, how they
+reuse slots. Every worker uses the same slot for the same piece of model
+update, and no slot can be simultaneously used for two different pieces.
+Every worker must work on the same slot at roughly the same time to
+avoid long synchronization delays. Each worker initially sends
+<code>s</code> packets, each with <code>k</code> from model update U,
+and then waits for the result from the switch. After consuming the
+aggregated result, the worker sends a new packet with the next piece of
+<code>k</code> parameters for the same pool slot.
+<ul>
+<li>Doesn&#x2019;t require explicit coordination among workers because the
+mapping between model updates, slots and packets is deterministic.</li>
+<li>The communication scheme is self-clocked after the initial
+<code>s</code> packets. When a slot is completed, the packets from the
+switch to the workers serve as flow-control acknowledgements that the
+switch is ready to reuse the slot, and the workers are free to send
+another packet.</li>
+</ul></li>
+</ul></li>
+<li><p>Pool-based streaming aggregation: SwitchML streams aggregation
+through the switch: it processes the aggregation function on a limited
+number of vector elements at once. For this, they use a pool of integer
+aggregators. The end-hosts manage these aggregators in the
+switch.</p></li>
+<li><p>Fault-tolerant protocols: To recover from packet loss.</p>
+<ul>
+<li>Tolerate packet loss by retransmitting lost packets. Packet loss
+detection is done by workers if they do not receive response before a
+timeout. Two additional pieces of switch state for correctness:
+<ul>
+<li>maintain information as to which workers have already contributed
+updates to a given slot (<code>seen[2][s][n]</code> for <code>n</code>
+workers). This is to ignore duplicate retransmissions.</li>
+<li>maintain a shadow copy of the previous result for each slot
+(<code>pool[2][s]</code>). Allows switch to retransmit a dropped result
+packet for a slot even when switch has started reusing the slot for next
+chunk. Workers alternate the single-bit pool version
+(<code>p.ver</code>) in each update packet.</li>
+</ul></li>
+<li>Keeping shadow copy doubles the memory requirement, and tracking the
+<code>seen</code> bitmask adds additional cost But the total number of
+slots needed is &lt;10% of switch&#x2019;s memory capacity (tuned based on
+network bandwidth-delay product).</li>
+</ul></li>
+<li><p>Quantized integer-based aggregation: SwitchML converts
+floating-point values to 32-bit integers using a block floating-point
+like approach.</p>
+<ul>
+<li>They combine 32-bit fixed-point addition in the switch with adaptive
+scaling on the workers. The scaling factor is set so that the max
+aggregated floating point value within a block of <code>k</code>
+gradients is still representable as a 32-bit fixed point value. The
+workers need to agree on a global value of <code>m</code>, a scaling
+parameter - they devise a simple lookahead strategy.</li>
+<li>Also explored the implementation of a restricted form of 16-bit
+floating point. Switch convertes each 16-bit float value into
+fixed-point value to aggregate &amp; then converts back to float before
+sending results.</li>
+</ul></li>
+<li><p>They support larger packets through recirculation: sending
+packets through the switch pipelines multiple times. This leads to
+better bandwidth efficiency due to more integer elements in each packet
+to offset the network framing overhead.</p></li>
+<li><p>They support RDMA since using even DPDK &amp; multiple cores
+cannot lead to 100Gbps throughput due to packet processing overhead.
+They use RoCE v2 in UC mode &amp; rely on SwitchML&#x2019;s reliability but
+retransmissions use multi-packet messages. To balance packet processing
+offload &amp; retransmission cost they use small, multi-packet message
+(16 packets).</p></li>
+</ul>
+<p>They benchmark SwitchML against state-of-the-art all-reduce
+communication libraries Gloo &amp; NCCL. SwitchML outperforms NCCL in
+aggregated tensor elements per unit of time (ATE/s). Also, they found
+SwitchML provides significant speedups in training batch-processing
+speedup compared to NCCL backend of PyTorch &amp; TensorFlow. The four
+network-bottlenecked DNNs at 100Gbps (DeepLight, LSTM, NCF, and BERT)
+provide speedups of upto 2.27x over NCCL-RDMA and 5.55x over
+NCCL-TCP.</p>
+<h2 id="strengths">Strengths</h2>
+<ul>
+<li>SwitchML speeds up DNN training by minimizing communication
+overheads at single-rack scale. Even though the paper described SwitchML
+in the context of a rack, the design can scale to multiple racks by
+hierarchically composing several instances of the switch logic. Easy
+extensibility is the hallmark of a good design. Another extension is to
+use the design to create a dedicated &#x201C;parameter aggregator&#x201D; on a
+standard server with an advanced network attachment.</li>
+<li>SwitchML builds on programmable network hardware which gives two
+benefits:
+<ul>
+<li>operators can deploy a single switch model either for SwitchML or
+traditional networking: the ALUs can be repurposed for other tasks.</li>
+<li>SwitchML allows the system design to evolve to support new ML
+training approaches, e.g.&#xA0;new floating-point representations.</li>
+</ul></li>
+</ul>
+<h2 id="future-work">Future Work</h2>
+<ul>
+<li>Experimenting with new floating-point representations and protocols
+for sparse vector aggregations.</li>
+<li>SwitchML slows down past the 150ms mark with 1% loss applied on
+every link because some slots are unevenly affected by random losses and
+SwitchML does not apply any form of work-stealing to rebalance the load
+among aggregators. This is a future opportunity for optimization.</li>
+</ul>
+  </div>
+
+  <script type="text/javascript" src="../js/mathjax_config.js"></script>
+	<script>
+		(function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+		(i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+		m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+		})(window,document,'script','https://www.google-analytics.com/analytics.js','ga');
+
+		ga('create', 'UA-90310997-2', 'auto');
+		ga('send', 'pageview');
+	</script>
+</body>
+</html>
