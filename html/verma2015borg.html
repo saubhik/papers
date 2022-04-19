@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Papers</title>
+  <link href='../css/style.css' rel='stylesheet'>
+  <meta name=viewport content="width=device-width, initial-scale=1">
+</head>
+
+<body>
+  <div id=header>
+    <a href="../">Papers</a>
+  </div>
+  <div id="container">
+<h1 id="large-scale-cluster-management-at-google-with-borg">Large-scale
+cluster management at Google with Borg</h1>
+<p>Abhishek Verma, Luis Pedrosa, Madhukar Korupolu, David Oppenheimer,
+Eric Tune, and John Wilkes. 2015. Large-scale cluster management at
+Google with Borg. In Proceedings of the Tenth European Conference on
+Computer Systems (EuroSys &#x2019;15). Association for Computing Machinery, New
+York, NY, USA, Article 18, 1&#x2013;17.
+DOI:https://doi.org/10.1145/2741948.2741964</p>
+<p>Google&#x2019;s Borg system is a cluster manager that:</p>
+<ul>
+<li>runs 100s of 1000s of jobs</li>
+<li>from many 1000s of apps</li>
+<li>across a number of clusters</li>
+<li>each cluster having 10s of 1000s of machines</li>
+</ul>
+<p>Achieves high utilization by combining admission control, efficient
+task packing, over-commitment &amp; machine sharing with process-level
+performance isolation.</p>
+<ul>
+<li>Users submit their work to Borg in the form of jobs. A job consists
+of one or more tasks that all run the same program (binary). Each job
+runs in one Borg cell. A Borg cell is a set of machines belonging to a
+single cluster. A cluster lives in a single DC building, and a
+collection of buildings makes up a site.</li>
+<li>Workload: heterogenous with two parts:
+<ul>
+<li>long-running, highly available, latency-sensitive, end-user facing
+services (e.g.&#xA0;Gmail, Google Docs, web search, BigTable), few us to few
+100s of ms, diurnal usage patterns. Classified as &#x201C;prod&#x201D;.</li>
+<li>batch jobs taking a few secs to a few days to complete, much less
+sensitive to short-term performance fluctuations. Classified as
+&#x201C;non-prod&#x201D;.</li>
+</ul></li>
+<li>Heterogeneous machines in a cell, in many dimensions: CPU, RAM, disk
+and network sizes, processor type, performance, capabilities such as
+external IP address or flash storage.</li>
+<li>Job&#x2019;s properties include name, owner &amp; number of tasks it has,
+constraints to force tasks to run on machines with particular attributes
+such as processor architecture, OS version, external IP address. A task
+maps to set of Linux processes A task maps to set of Linux
+processes.</li>
+<li>Users operate on jobs by issuing RPCs to Borg from a cmdline tool,
+other jobs, or monitoring system. Job descriptions are written in a
+declarative configuration lang, BCL. Jobs can be <code>submit</code>ted
+and <code>accept</code>ed to <code>Pending</code> state, and get
+<code>schedule</code>d to <code>Running</code> state, and then
+<code>finish</code> to <code>Dead</code> state. <code>fail, kill,
+lost</code> leads to <code>Dead</code>. <code>evict</code> from
+<code>Running</code> leads to <code>Pending</code> (pre-emption).</li>
+<li>A Borg <code>alloc</code> is a reserved set of resources on a
+machine in which one or more tasks can be run. Analogous concept is
+<code>pod</code> in Kubernetes. An alloc set is a group of allocs that
+reserve resources on multiple machines.
+<ul>
+<li>To set resources aside for future tasks</li>
+<li>To retain resources b/w stopping a task &amp; starting it again</li>
+<li>Gather tasks from different jobs onto same machine - webserver &amp;
+logsaver task (copy server&#x2019;s URL logs from local disk to distributed
+FS)</li>
+</ul></li>
+<li>When more work shows up than can be accommodated, they use
+priorities &amp; quota.
+<ul>
+<li>Every job has a <code>priority</code>, a small positive integer,
+expressing relative importance of the job that are running or waiting to
+run in a cell. A high-priority task can obtain resources at the expense
+of a lower-priority one, even if that involves preempting the latter. To
+prevent preemption cascades, they disallow tasks in production priority
+band to preempt one another.</li>
+<li>Quota decides which jobs to admit for scheduling. It is a vector of
+resource quantities (CPU, RAM, disk, etc.) at a given priority for a
+period of time. Quota-checking is part of admission control.
+Over-selling quota at lower-priority levels to avoid over-buying quota.
+Quota allocation is outside Borg, and tied to Google&#x2019;s physical capacity
+planning. User jobs are only admitted if they have sufficient quota at
+the required priority.</li>
+</ul></li>
+<li>A service&#x2019;s clients use the BNS (Borg Name Service) name to find a
+task. Forms the basis for the task&#x2019;s DNS name:
+<code>taskID.jobName.userName.cellName.borg.google.com</code>. Every
+task contains a built-in HTTP server to publish information about task
+health &amp; performance metrics (e.g.&#xA0;RPC latencies). A UI service
+(Sigma) provides a dashboard.</li>
+<li>Borg architecture: Logically centralized controller, Borgmaster, and
+agent process called Borglet running on each machine in the cell.
+<ul>
+<li>Borgmaster: main process + separate scheduler.
+<ul>
+<li>main process handles client RPCs that mutate state or provide RO
+access to data. Manages state machines for all objects (machines, tasks,
+allocs). Communicates with Borglets. Offers a backup web UI to Sigma.
+Replicated 5 times for fault tolerance. Paxos leader is the state
+mutator. Periodic checkpointing + change logs for fault tolerance &amp;
+debugging &amp; capacity planning.</li>
+<li>Job&#x2019;s tasks added to pending queue on submission by Borgmaster.
+Pending queue is scanned from high to low priority, round-robin scheme
+within a priority to ensure fairness across users &amp; avoid HoL
+blocking, by scheduler. Two parts: feasibility checking &amp; scoring.
+<ul>
+<li>feasibility checking: find machines that meet the task&#x2019;s constraints
+&amp; have enough &#x201C;available&#x201D; resources - including resources assigned
+to lower-priority tasks that can be evicted</li>
+<li>scoring: score each feasible machine based on user-specified
+preferences, &amp; built-in criteria (minimize the no. &amp; priority of
+preempted tasks, pick machines having a copy of the task&#x2019;s packages to
+reduce task startup time, spreading tasks across power &amp; failure
+domains, packing quality). The scoring model tries to reduce amount of
+stranded resources that cannot be used because another resource on the
+machine is fully allocated.</li>
+</ul></li>
+</ul></li>
+<li>Borglet starts &amp; stops tasks, restarts them if they fail, manage
+local resources by manipulating OS kernel settings, rolls over debug
+logs, reports the state of the machine to the Borgmaster &amp; other
+monitoring systems. The Borgmaster polls each Borglet every few secs to
+retrieve the current state &amp; send any outstanding requests.</li>
+</ul></li>
+<li>To scale, they split the scheduler into a separate process so it
+could operate in parallel with other replicated Borgmaster functions.
+Separate threads to talk to the Borglets &amp; respond to read-only RPCs
+improve response times. More scalability optimizations:
+<ul>
+<li>score caching: ignore small changes in resource quantities reduces
+cache invalidations.</li>
+<li>equivalence classes: feasibility checking &amp; scoring for one task
+per equivalence class (identical requirements &amp; constraints).</li>
+<li>relaxed randomization: examine machines in a random order until
+enough feasible machines to score &amp; select the best.</li>
+</ul></li>
+<li>A key-design feature for availability is that already-running tasks
+continue to run even if the Borgmaster or a task&#x2019;s Borglet goes
+down.</li>
+<li>Increasing utilization by a few percentage points can save millions
+of dollars. &#x201C;Cell compaction&#x201D; is chosen as utilization metric: given a
+workload, how small a cell it could be fitted into? Better scheduling
+policies require fewer machines to run on the same workload.
+<ul>
+<li>Cell sharing: segregating prod &amp; non-prod work would need more
+machines because prod jobs usually reserve resources to handle rare
+workload spikes but don&#x2019;t use these resources most of the time. Borg&#x2019;s
+resource reclamation run non-prod work using reclaimed resources. The
+CPU slowdown (increase in CPI) by packing unrelated users &amp; job
+types onto the same machine is outweighed by decrease in machines
+required.</li>
+<li>Large cells: Allows large computations, &amp; decrease resource
+fragmentation.</li>
+<li>Fine-grained resource requests: Request CPU in milli-cores, and
+memory &amp; disk-space in bytes (core = processor hyperthread).
+Offering fized-size CPU &amp; memory would require more machines.</li>
+<li>Resource reclamation: A job specifies a resource limit - to
+determine if user has enough quota for admission. Borgmaster estimates
+how much resources a task will use (reservation) every few seconds based
+on usage information captured by Borglet &amp; reclaim the rest for
+batch work. This reduces the number of machines used. Reservation -
+Usage = Safety Margin. Too less safety margin leads to OOMs.</li>
+</ul></li>
+<li>They use a Linux chroot jail as the primary security isolation
+mechanism between multiple tasks on the same machine &amp; VMs &amp;
+security sandboxing techniques are used to run external software by
+Google&#x2019;s AppEngine &amp; Google Compute Engine.</li>
+<li>Borg tasks run inside a Linux cgroup-based resource contained &amp;
+Borglet manipulates the container settings, giving improved control.
+<ul>
+<li>Borg tasks have an <code>appclass</code>: latency-sensitive (LS)
+&amp; batch. High-priority LS tasks receive best treatment.</li>
+<li>Compressible (CPU cycles, disk I/O bandwidth) &amp; non-compressible
+resources (memory, disk): if a machine runs out of non-compressible
+resources, Borglet immediately terminates tasks from lowest to highest
+priority; if a machine runs out of compressible resources, the Borglet
+throttles usage (favoring LS tasks) so that short load spikes can be
+handled without killing any tasks.</li>
+<li>To reduce scheduling delays, their version of CFS uses extended
+per-cgroup load history, allows preemption of batch tasks by LS tasks,
+reduces scheduling quantum when multiple LS tasks are runnable.</li>
+</ul></li>
+</ul>
+<h2 id="strengths">Strengths</h2>
+<ul>
+<li>Throughout the design they gave importance to debugging
+(instrospection) by surfacing debugging information to all users rather
+than hiding it. To handle the enormous volume of data, they provide
+several levels of UI &amp; debugging tools so users can quickly identify
+anomalous events related to their jobs &amp; then drill down to detailed
+event &amp; errors logs from their applications &amp; infrastructure
+itself.</li>
+<li>Another important part of managing large scale clusters is
+automation &amp; operator scaleout: Borg&#x2019;s design allows them to support
+10s of 1000s of machines per operator (SRE).</li>
+<li>The qualitative lessons they learned from operating Borg in
+production for more than a decade were incorporated in Kubernetes which
+has become extremely popular now:
+<ul>
+<li>allocs are useful: allows helper services to be developed by
+separate teams &amp; this abstraction spawned the widely-used logsaver
+pattern &amp; data-loader+webserver pattern.</li>
+<li>cluster management is more than task management: apps on Borg
+benefit from other cluster services such as naming &amp; load balancing,
+apart from lifecycle management of tasks &amp; machines.</li>
+<li>master is the kernel of a distributed system: although originally
+built as a monolithic system, Borgmaster became a kernel sitting at the
+heart of an ecosystem of services that cooperate to manage user jobs:
+scheduler, UI (Sigma), admission control, vertical &amp; horizontal
+auto-scaling, re-packing tasks, periodic job submission, workflow
+management, archiving system actions for offline querying. Affording
+this scaling of workload &amp; feature set without sacrificing
+performance, scalability &amp; maintainability is hallmark of a good
+design.</li>
+</ul></li>
+</ul>
+<h2 id="weaknesses">Weaknesses</h2>
+<ul>
+<li>The only form of data locality supported by the Borg scheduler is
+sharing &amp; caching immutable packages used by different tasks. The
+scheduler doesn&#x2019;t take into account low-level resource interference:
+such as memory bandwidth contention or L3 cache pollution. Maybe the
+scheduler can be further improved.</li>
+<li>As discussed in the paper:
+<ul>
+<li>Jobs are restrictive as the only grouping mechanism for tasks: no
+way to manage multi-job service as a single entity or related instances
+of a service (canary &amp; production tracks). K8s solves this by using
+<code>labels</code> - arbitrary key-value paris that user can attach to
+any object in the system.</li>
+<li>One IP address per machine complicates things: Borg needed to
+schedule ports as a resource, assign ports to tasks, enforce port
+isolation &amp; RPC systems needed to handle ports as well as IP
+addresses. K8s uses Linux namespaces, VMs, IPv6 &amp; SDN to give an IP
+address to every pod &amp; service.</li>
+<li>Optimizing for power users at the expense of casual ones: the BCL
+specification lists about 230 parameters &amp; makes it harder for the
+casual user to use Borg.</li>
+</ul></li>
+<li>Borg, as described in this paper, is only suitable for Google&#x2019;s
+workloads and Google&#x2019;s machines. The design choices that affected their
+system are extremely Google-specific. To cite an instance: the vast
+majority of the Borg worklaod does not run inside VMs - a reason being
+the system was designed at a time when Google had made a considerable
+investment in processors with no virtualization support in hardware. But
+of course, the paper presents many ideas to build such a cluster
+management system.</li>
+<li>Not enough motivation (quantitatively) provided for choosing &#x201C;cell
+compaction&#x201D; as the utilization metric for Borg&#x2019;s design. They just say
+that they picked this metric after much experimentation and the details
+are avoided. They mention cell compaction gives a fair, consistent way
+to compare scheduling policies.</li>
+</ul>
+<h2 id="future-work">Future Work</h2>
+<ul>
+<li>As discussed above, work continues in improving the scheduler.
+Adding thread placement &amp; CPU management that is NUMA-,
+hyperthreading-, and power-aware &amp; improving the control fidelity of
+the Borglet.</li>
+<li>Even though K8s is being actively developed, maybe rewriting the BCL
+to support a simpler API for casual users might be a potential future
+work.</li>
+</ul>
+  </div>
+
+  <script type="text/javascript" src="../js/mathjax_config.js"></script>
+	<script>
+		(function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+		(i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+		m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+		})(window,document,'script','https://www.google-analytics.com/analytics.js','ga');
+
+		ga('create', 'UA-90310997-2', 'auto');
+		ga('send', 'pageview');
+	</script>
+</body>
+</html>
